@@ -2,7 +2,9 @@ package wireguard
 
 import (
 	"errors"
+	"io"
 	"log"
+	"os/exec"
 	"regexp"
 )
 
@@ -41,6 +43,37 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 		return NewUser{}, errors.New("invalid username")
 	}
 	// call to system to create a new user
-
+	// generate keys:
+	privkey, pubkey, err := createWGKey()
+	if err != nil {
+		return NewUser{}, err
+	}
+	_ = privkey
+	_ = pubkey
 	return newuser, nil
+}
+
+func createWGKey() (string, string, error) {
+	// create a new private key
+	privkeyBytes, err := exec.Command("wg", "genkey").Output()
+	if err != nil {
+		return "", "", err
+	}
+	privkey := string(privkeyBytes)
+	// generate a public key using privkey as input on stdin
+	cmd := exec.Command("wg", "pubkey")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return "", "", err
+	}
+	go func() {
+		defer stdin.Close()
+		io.WriteString(stdin, privkey)
+	}()
+	pubkeyBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", "", err
+	}
+	pubkey := string(pubkeyBytes)
+	return privkey, pubkey, nil
 }
