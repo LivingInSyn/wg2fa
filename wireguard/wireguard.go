@@ -2,11 +2,13 @@ package wireguard
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"os/exec"
 	"regexp"
+	"strings"
 )
 
 const usernameRegex = "^[a-zAZ0-9\\.@_-]+$"
@@ -22,6 +24,10 @@ type WGClient struct {
 	ClientConfigPath string
 	// ClientListPath is the location of the file that stores the list of configured clients, their IP and public key. No private data
 	ClientListPath string
+	// DNS is a slice of strings for what DNS servers to configure
+	DNSServers []string
+	// ServerHostname is the hostname or IP of the server in host:port format
+	ServerHostname string
 }
 
 // NewUser is the struct for a new wireguard user
@@ -47,22 +53,60 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	if !match {
 		return NewUser{}, errors.New("invalid username")
 	}
+	// get the current wireguard config
+	wgConfig, err := parseConfig(c.WGConfigPath)
+	if err != nil {
+		return NewUser{}, err
+	}
+	// get the public key:
+	serverPrivkey := ""
+	for _, configSection := range wgConfig {
+		if configSection.SectionName == "Interface" {
+			serverPrivkey = configSection.ConfigValues["PrivateKey"]
+			break
+		}
+	}
+	if serverPrivkey == "" {
+		return NewUser{}, errors.New("No server private key found")
+	}
+	serverPubKey, err := getPubKey(serverPrivkey)
+	if err != nil {
+		return NewUser{}, err
+	}
 	// call to system to create a new user
 	// generate keys:
 	privkey, pubkey, err := createWGKey()
 	if err != nil {
 		return NewUser{}, err
 	}
-	_ = privkey
 	_ = pubkey
 	// get a PSK
 	psk, err := createPSK()
 	if err != nil {
 		return NewUser{}, err
 	}
-	_ = psk
 	// find an unused IP
-
+	ip, err := getOpenIP(c.WGConfigPath, c.ClientConfigPath)
+	if err != nil {
+		return NewUser{}, err
+	}
+	// now build the config string:
+	// TODO: make this NOT gross (should be a file template)
+	ccf := ""
+	ccf = ccf + "[Interface]\n"
+	ccf = ccf + fmt.Sprintf("PrivateKey = %s\n", privkey)
+	ccf = ccf + fmt.Sprintf("Address = %s\n", ip)
+	ccf = ccf + fmt.Sprintf("DNS = %s\n", strings.Join(c.DNSServers[:], ", "))
+	ccf = ccf + "\n"
+	ccf = ccf + "[Peer]\n"
+	ccf = ccf + fmt.Sprintf("PublicKey = %s\n", serverPubKey)
+	ccf = ccf + fmt.Sprintf("PresharedKey = %s\n", psk)
+	ccf = ccf + fmt.Sprintf("Endpoint = %s\n", c.ServerHostname)
+	// TODO: change this since that's like... the whole point of this project
+	ccf = ccf + fmt.Sprintf("AllowedIPs = %s\n", "0.0.0.0/0, ::0/0")
+	// return the completed new user
+	addUserToClientConfig(c.ClientConfigPath, newuser.ClientName, pubkey, ip)
+	newuser.WGConf = ccf
 	return newuser, nil
 }
 
@@ -74,10 +118,19 @@ func createWGKey() (string, string, error) {
 	}
 	privkey := string(privkeyBytes)
 	// generate a public key using privkey as input on stdin
+	pubkey, err := getPubKey(privkey)
+	if err != nil {
+		return "", "", err
+	}
+	return privkey, pubkey, nil
+}
+
+func getPubKey(privkey string) (string, error) {
+	// generate a public key using privkey as input on stdin
 	cmd := exec.Command("wg", "pubkey")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	go func() {
 		defer stdin.Close()
@@ -85,10 +138,10 @@ func createWGKey() (string, string, error) {
 	}()
 	pubkeyBytes, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	pubkey := string(pubkeyBytes)
-	return privkey, pubkey, nil
+	return pubkey, nil
 }
 
 func createPSK() (string, error) {
@@ -124,7 +177,8 @@ func getOpenIP(confPath, clientConfPath string) (string, error) {
 	}
 	for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); inc(ip) {
 		if currentIPs[ip.String()] == false {
-			return ip.String(), nil
+			cidr := strings.Split(ipRangeString, "/")[1]
+			return fmt.Sprintf("%s/%s", ip.String(), cidr), nil
 		}
 	}
 	return "", errors.New("IP Space exhausted")

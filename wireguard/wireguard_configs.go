@@ -84,3 +84,38 @@ func parseClientConfig(confPath string) (Clients, error) {
 	json.Unmarshal(confBytes, &allClients)
 	return allClients, nil
 }
+
+func addUserToClientConfig(confPath, name, pubkey, ip string) error {
+	//get the current config
+	clientConf, err := parseClientConfig(confPath)
+	if err != nil {
+		return err
+	}
+	newclient := clientConfig{
+		Name:      name,
+		PublicKey: pubkey,
+		IP:        ip,
+	}
+	clientConf.Clients = append(clientConf.Clients, newclient)
+	//json dump the clientConf and write it to a file
+	newConf, err := json.Marshal(clientConf)
+	if err != nil {
+		return err
+	}
+	confFile, err := os.Open(confPath)
+	if err != nil {
+		return err
+	}
+	defer confFile.Close()
+	//clear the old
+	err = confFile.Truncate(0)
+	if err != nil {
+		return err
+	}
+	//write the new
+	_, err = confFile.Write(newConf)
+	if err != nil {
+		return err
+	}
+	return nil
+}
