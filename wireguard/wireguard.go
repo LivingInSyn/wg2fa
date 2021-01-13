@@ -1,15 +1,12 @@
 package wireguard
 
 import (
-	"bufio"
 	"errors"
 	"io"
 	"log"
 	"net"
-	"os"
 	"os/exec"
 	"regexp"
-	"strings"
 )
 
 const usernameRegex = "^[a-zAZ0-9\\.@_-]+$"
@@ -23,6 +20,8 @@ type WGClient struct {
 	KeyPath string
 	// ClientConfigs is the location to write generated client configs to. If nil or blank this will not be written to disk
 	ClientConfigPath string
+	// ClientListPath is the location of the file that stores the list of configured clients, their IP and public key. No private data
+	ClientListPath string
 }
 
 // NewUser is the struct for a new wireguard user
@@ -34,6 +33,7 @@ type NewUser struct {
 
 // Init initializes a WGClient
 func (c WGClient) Init() error {
+	// TODO: make sure that the client config file exists and is formatted
 	return nil
 }
 
@@ -100,76 +100,41 @@ func createPSK() (string, error) {
 	return psk, nil
 }
 
-// ConfigSection is a configuration file ini section
-type ConfigSection struct {
-	SectionName  string
-	ConfigValues map[string]string
-}
-
-// NewConfigSection returns a new ConfigSection with the name initialized
-func NewConfigSection(name string) ConfigSection {
-	return ConfigSection{
-		SectionName:  name,
-		ConfigValues: make(map[string]string),
-	}
-}
-
-func parseConfig(confPath string) {
-	// open the file
-	confFile, err := os.Open(confPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer confFile.Close()
-	// scan it breaking it down into sections
-	sections := make([]ConfigSection, 10)
-	currentSection := NewConfigSection("Default")
-	scanner := bufio.NewScanner(confFile)
-	for scanner.Scan() {
-		line := scanner.Text()
-		// check if we're starting a new section
-		match, err := regexp.MatchString(sectionRegex, line)
-		if err != nil {
-			log.Fatal("Error in regex")
-		}
-		if match {
-			// append the current and start a new
-			sections = append(sections, currentSection)
-			currentSection = NewConfigSection(strings.Trim(line, "[]"))
-		}
-		// otherwise, append KVPs to the current section
-		splitline := strings.Split(line, "=")
-		key := strings.Trim(splitline[0], " ")
-		value := strings.Trim(splitline[1], " ")
-		currentSection.ConfigValues[key] = value
-	}
-}
-
-func getOpenIP(confPath string) (string, error) {
-	// read the config file to get the server subnet
-	confFile, err := os.Open(confPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer confFile.Close()
-
-	scanner := bufio.NewScanner(confFile)
-	ipRangeString := ""
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "Address") {
-			splitlines := strings.Split(line, "=")
-			ipRangeString = strings.Trim(splitlines[1], " ")
-			break
-		}
-	}
-	severIPAddr, ipNet, err := net.ParseCIDR(ipRangeString)
+func getOpenIP(confPath, clientConfPath string) (string, error) {
+	// get the current config and the server IP range:
+	wgConfig, err := parseConfig(confPath)
 	if err != nil {
 		return "", nil
 	}
-	// TODO: go up the range of clients and
-	return "", nil
+	ipRangeString := ""
+	for _, section := range wgConfig {
+		if section.SectionName == "Interface" {
+			ipRangeString = section.ConfigValues["Address"]
+			break
+		}
+	}
+	if ipRangeString == "" {
+		return "", errors.New("No IP Range string found")
+	}
+	ip, ipNet, err := net.ParseCIDR(ipRangeString)
+	currentClients, err := parseClientConfig(clientConfPath)
+	currentIPs := make(map[string]bool)
+	for _, client := range currentClients.Clients {
+		currentIPs[client.IP] = true
+	}
+	for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); inc(ip) {
+		if currentIPs[ip.String()] == false {
+			return ip.String(), nil
+		}
+	}
+	return "", errors.New("IP Space exhausted")
 }
 
-// TODO: rethink this. I think one pass parsing the whole wireguard config is going
-// to be a better option than what I'm doing in this disaster of getOpenIP
+func inc(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		ip[j]++
+		if ip[j] > 0 {
+			break
+		}
+	}
+}
