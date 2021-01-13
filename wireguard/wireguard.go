@@ -1,11 +1,15 @@
 package wireguard
 
 import (
+	"bufio"
 	"errors"
 	"io"
 	"log"
+	"net"
+	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 )
 
 const usernameRegex = "^[a-zAZ0-9\\.@_-]+$"
@@ -50,6 +54,14 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	}
 	_ = privkey
 	_ = pubkey
+	// get a PSK
+	psk, err := createPSK()
+	if err != nil {
+		return NewUser{}, err
+	}
+	_ = psk
+	// find an unused IP
+
 	return newuser, nil
 }
 
@@ -77,3 +89,41 @@ func createWGKey() (string, string, error) {
 	pubkey := string(pubkeyBytes)
 	return privkey, pubkey, nil
 }
+
+func createPSK() (string, error) {
+	pskBytes, err := exec.Command("wg", "genpsk").Output()
+	if err != nil {
+		return "", err
+	}
+	psk := string(pskBytes)
+	return psk, nil
+}
+
+func getOpenIP(confPath string) (string, error) {
+	// read the config file to get the server subnet
+	confFile, err := os.Open(confPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer confFile.Close()
+
+	scanner := bufio.NewScanner(confFile)
+	ipRangeString := ""
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "Address") {
+			splitlines := strings.Split(line, "=")
+			ipRangeString = strings.Trim(splitlines[1], " ")
+			break
+		}
+	}
+	severIPAddr, ipNet, err := net.ParseCIDR(ipRangeString)
+	if err != nil {
+		return "", nil
+	}
+	// TODO: go up the range of clients and
+	return "", nil
+}
+
+// TODO: rethink this. I think one pass parsing the whole wireguard config is going
+// to be a better option than what I'm doing in this disaster of getOpenIP
