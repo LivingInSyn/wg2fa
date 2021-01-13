@@ -13,6 +13,7 @@ import (
 )
 
 const usernameRegex = "^[a-zAZ0-9\\.@_-]+$"
+const sectionRegex = "^\\[[a-zA-Z0-9]+\\]$"
 
 // WGClient is a struct defining the config of wireguard
 type WGClient struct {
@@ -97,6 +98,51 @@ func createPSK() (string, error) {
 	}
 	psk := string(pskBytes)
 	return psk, nil
+}
+
+// ConfigSection is a configuration file ini section
+type ConfigSection struct {
+	SectionName  string
+	ConfigValues map[string]string
+}
+
+// NewConfigSection returns a new ConfigSection with the name initialized
+func NewConfigSection(name string) ConfigSection {
+	return ConfigSection{
+		SectionName:  name,
+		ConfigValues: make(map[string]string),
+	}
+}
+
+func parseConfig(confPath string) {
+	// open the file
+	confFile, err := os.Open(confPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer confFile.Close()
+	// scan it breaking it down into sections
+	sections := make([]ConfigSection, 10)
+	currentSection := NewConfigSection("Default")
+	scanner := bufio.NewScanner(confFile)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// check if we're starting a new section
+		match, err := regexp.MatchString(sectionRegex, line)
+		if err != nil {
+			log.Fatal("Error in regex")
+		}
+		if match {
+			// append the current and start a new
+			sections = append(sections, currentSection)
+			currentSection = NewConfigSection(strings.Trim(line, "[]"))
+		}
+		// otherwise, append KVPs to the current section
+		splitline := strings.Split(line, "=")
+		key := strings.Trim(splitline[0], " ")
+		value := strings.Trim(splitline[1], " ")
+		currentSection.ConfigValues[key] = value
+	}
 }
 
 func getOpenIP(confPath string) (string, error) {
