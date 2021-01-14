@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os/exec"
@@ -88,11 +89,27 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	if err != nil {
 		return NewUser{}, err
 	}
-	_ = pubkey
 	// get a PSK
 	psk, err := createPSK()
 	if err != nil {
 		return NewUser{}, err
+	}
+	if c.KeyPath != "" {
+		keyfilename := fmt.Sprintf("%s/%s.key", c.KeyPath, newuser.ClientName)
+		err = ioutil.WriteFile(keyfilename, []byte(privkey), 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		keyfilename = fmt.Sprintf("%s/%s.key.pub", c.KeyPath, newuser.ClientName)
+		err = ioutil.WriteFile(keyfilename, []byte(pubkey), 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		keyfilename = fmt.Sprintf("%s/%s.psk", c.KeyPath, newuser.ClientName)
+		err = ioutil.WriteFile(keyfilename, []byte(psk), 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	// find an unused IP
 	ip, err := getOpenIP(c.WGConfigPath, c.ClientListPath)
@@ -117,6 +134,14 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	err = addUserToClientList(c.ClientListPath, newuser.ClientName, pubkey, ip)
 	if err != nil {
 		return NewUser{}, err
+	}
+	// optionally write to the ClientConfigPath
+	if c.ClientConfigPath != "" {
+		keyfilename := fmt.Sprintf("%s/%s.conf", c.ClientConfigPath, newuser.ClientName)
+		err = ioutil.WriteFile(keyfilename, []byte(ccf), 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	newuser.WGConf = ccf
 	return newuser, nil
