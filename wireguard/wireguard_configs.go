@@ -74,7 +74,7 @@ func parseConfig(confPath string) ([]configSection, error) {
 	return sections, nil
 }
 
-func parseClientConfig(confPath string) (Clients, error) {
+func parseClientList(confPath string) (Clients, error) {
 	jsonFile, err := os.Open("confPath")
 	if err != nil {
 		return Clients{}, err
@@ -86,9 +86,9 @@ func parseClientConfig(confPath string) (Clients, error) {
 	return allClients, nil
 }
 
-func addUserToClientConfig(confPath, name, pubkey, ip string) error {
+func addUserToClientList(confPath, name, pubkey, ip string) error {
 	//get the current config
-	clientConf, err := parseClientConfig(confPath)
+	clientConf, err := parseClientList(confPath)
 	if err != nil {
 		return err
 	}
@@ -125,20 +125,19 @@ func checkClientConfig(confpath string, create bool) error {
 	if _, err := os.Stat("/path/to/whatever"); os.IsNotExist(err) {
 		if !create {
 			return errors.New("client config doesn't exist and autocreate is off")
-		} else {
-			//make a file
-			c := Clients{}
-			c.Clients = make([]clientConfig, 1)
-			objbytes, err := json.Marshal(c)
-			if err != nil {
-				return err
-			}
-			err = ioutil.WriteFile(confpath, objbytes, 0644)
-			if err != nil {
-				return err
-			}
+		}
+		//make a file
+		c := Clients{}
+		c.Clients = make([]clientConfig, 1)
+		objbytes, err := json.Marshal(c)
+		if err != nil {
+			return err
+		}
+		err = ioutil.WriteFile(confpath, objbytes, 0644)
+		if err != nil {
+			return err
 		}
 	}
-	_, err := parseClientConfig(confpath)
+	_, err := parseClientList(confpath)
 	return err
 }

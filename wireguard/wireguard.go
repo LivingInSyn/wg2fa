@@ -18,7 +18,7 @@ const sectionRegex = "^\\[[a-zA-Z0-9]+\\]$"
 type WGClient struct {
 	// WGConfigPath is the path to the wireguard config to manage
 	WGConfigPath string
-	// KeyPath is the location of generated private keys for users
+	// KeyPath is the location of generated private keys for users. If nil, private keys won't be written to disk
 	KeyPath string
 	// ClientConfigs is the location to write generated client configs to. If nil or blank this will not be written to disk
 	ClientConfigPath string
@@ -39,9 +39,15 @@ type NewUser struct {
 
 // Init initializes a WGClient
 func (c WGClient) Init() error {
-	err := checkClientConfig(c.ClientConfigPath, true)
+	err := checkClientConfig(c.ClientListPath, true)
 	if err != nil {
 		return err
+	}
+	// TODO: if keypath, check that the folder exists with sane permissions
+	// TODO: if clientconfigpath check that the folder exists with sane permissions
+	// TODO: check DNSServers for sanity. Len > 0 and proper IPs
+	if c.ServerHostname == "" || !strings.Contains(c.ServerHostname, ":") {
+		return errors.New("Invalid server hostname string")
 	}
 	return nil
 }
@@ -89,7 +95,7 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 		return NewUser{}, err
 	}
 	// find an unused IP
-	ip, err := getOpenIP(c.WGConfigPath, c.ClientConfigPath)
+	ip, err := getOpenIP(c.WGConfigPath, c.ClientListPath)
 	if err != nil {
 		return NewUser{}, err
 	}
@@ -108,7 +114,10 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	// TODO: change this since that's like... the whole point of this project
 	ccf = ccf + fmt.Sprintf("AllowedIPs = %s\n", "0.0.0.0/0, ::0/0")
 	// return the completed new user
-	addUserToClientConfig(c.ClientConfigPath, newuser.ClientName, pubkey, ip)
+	err = addUserToClientList(c.ClientListPath, newuser.ClientName, pubkey, ip)
+	if err != nil {
+		return NewUser{}, err
+	}
 	newuser.WGConf = ccf
 	return newuser, nil
 }
@@ -173,7 +182,7 @@ func getOpenIP(confPath, clientConfPath string) (string, error) {
 		return "", errors.New("No IP Range string found")
 	}
 	ip, ipNet, err := net.ParseCIDR(ipRangeString)
-	currentClients, err := parseClientConfig(clientConfPath)
+	currentClients, err := parseClientList(clientConfPath)
 	currentIPs := make(map[string]bool)
 	for _, client := range currentClients.Clients {
 		currentIPs[client.IP] = true
