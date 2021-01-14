@@ -39,7 +39,10 @@ type NewUser struct {
 
 // Init initializes a WGClient
 func (c WGClient) Init() error {
-	// TODO: make sure that the client config file exists and is formatted
+	err := checkClientConfig(c.ClientConfigPath, true)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -3,6 +3,7 @@ package wireguard
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"os"
@@ -118,4 +119,26 @@ func addUserToClientConfig(confPath, name, pubkey, ip string) error {
 		return err
 	}
 	return nil
+}
+
+func checkClientConfig(confpath string, create bool) error {
+	if _, err := os.Stat("/path/to/whatever"); os.IsNotExist(err) {
+		if !create {
+			return errors.New("client config doesn't exist and autocreate is off")
+		} else {
+			//make a file
+			c := Clients{}
+			c.Clients = make([]clientConfig, 1)
+			objbytes, err := json.Marshal(c)
+			if err != nil {
+				return err
+			}
+			err = ioutil.WriteFile(confpath, objbytes, 0644)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	_, err := parseClientConfig(confpath)
+	return err
 }
