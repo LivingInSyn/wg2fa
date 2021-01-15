@@ -35,6 +35,7 @@ type WGClient struct {
 // right now this only accepts ClientName and builds everything else
 type NewUser struct {
 	ClientName string `json:"client_name"`
+	PublicKey  string `json:"public_key"`
 	WGConf     string `json:"wg_conf"`
 }
 
