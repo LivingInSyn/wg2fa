@@ -1,27 +1,27 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 
-	"./okta"
 	"./wireguard"
 
 	"github.com/gorilla/mux"
+	jwtverifier "github.com/okta/okta-jwt-verifier-golang"
 )
 
 var wgclient wireguard.WGClient
+var clientID = "0oawepftsdT43o2CM0h7"
+var issuer = "https://dev-318981-admin.oktapreview.com/oauth2/default"
 
 // NewUser accepts POSTs of new user objects and creates a new wireguard user.
 // The returned wireguard config will require the caller to replace CLIENT_PRIVATE_KEY
 // with their private key
 func NewUser(w http.ResponseWriter, r *http.Request) {
-	if !okta.IsAuthenticated(r) {
+	btoken := r.Header.Get("Bearer")
+	if isAuthenticated(btoken) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -73,20 +73,22 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", HomeHandler).Methods("GET")
 	r.HandleFunc("/newuser", NewUser).Methods("POST")
-	// okta functions
-	r.HandleFunc("/login", okta.LoginHandler)
-	r.HandleFunc("/authorization-code/callback", okta.AuthCodeCallbackHandler)
-	r.HandleFunc("/logout", okta.LogoutHandler)
 	// start
 	http.Handle("/", r)
 }
 
-func generateNonce() (string, error) {
-	nonceBytes := make([]byte, 32)
-	_, err := rand.Read(nonceBytes)
-	if err != nil {
-		return "", fmt.Errorf("could not generate nonce")
+func isAuthenticated(jwt string) bool {
+	toValidate := map[string]string{}
+	toValidate["aud"] = "api://default"
+	toValidate["cid"] = clientID
+
+	jwtVerifierSetup := jwtverifier.JwtVerifier{
+		Issuer:           issuer,
+		ClaimsToValidate: toValidate,
 	}
 
-	return base64.URLEncoding.EncodeToString(nonceBytes), nil
+	verifier := jwtVerifierSetup.New()
+
+	_, err := verifier.VerifyAccessToken(jwt)
+	return err != nil
 }
