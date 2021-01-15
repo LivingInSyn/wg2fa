@@ -8,21 +8,23 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 
+	"./okta"
 	"./wireguard"
 
 	"github.com/gorilla/mux"
 )
 
 var wgclient wireguard.WGClient
-var state = "ApplicationState"
-var nonce = "NonceNotSetYet"
 
 // NewUser accepts POSTs of new user objects and creates a new wireguard user.
 // The returned wireguard config will require the caller to replace CLIENT_PRIVATE_KEY
 // with their private key
 func NewUser(w http.ResponseWriter, r *http.Request) {
+	if !okta.IsAuthenticated(r) {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
 	reqbody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -48,28 +50,10 @@ func NewUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// LoginHandler handles the redirect to our oAuth2 provider to get a token
-func LoginHandler(w http.ResponseWriter, r *http.Request) {
-	nonce, err := generateNonce()
-	if err != nil {
-		// TODO: log
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	var redirectPath string
-
-	q := r.URL.Query()
-	q.Add("client_id", os.Getenv("CLIENT_ID"))
-	q.Add("response_type", "code")
-	q.Add("response_mode", "query")
-	q.Add("scope", "openid profile email")
-	q.Add("redirect_uri", "http://localhost:8080/authorization-code/callback")
-	q.Add("state", state)
-	q.Add("nonce", nonce)
-
-	redirectPath = os.Getenv("ISSUER") + "/v1/authorize?" + q.Encode()
-
-	http.Redirect(w, r, redirectPath, http.StatusMovedPermanently)
+// HomeHandler just returns a 200 OK
+func HomeHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
 
 func main() {
@@ -87,7 +71,13 @@ func main() {
 		log.Fatal(err)
 	}
 	r := mux.NewRouter()
+	r.HandleFunc("/", HomeHandler).Methods("GET")
 	r.HandleFunc("/newuser", NewUser).Methods("POST")
+	// okta functions
+	r.HandleFunc("/login", okta.LoginHandler)
+	r.HandleFunc("/authorization-code/callback", okta.AuthCodeCallbackHandler)
+	r.HandleFunc("/logout", okta.LogoutHandler)
+	// start
 	http.Handle("/", r)
 }
 
