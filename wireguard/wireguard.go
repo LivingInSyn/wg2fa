@@ -19,8 +19,6 @@ const sectionRegex = "^\\[[a-zA-Z0-9]+\\]$"
 type WGClient struct {
 	// WGConfigPath is the path to the wireguard config to manage
 	WGConfigPath string
-	// KeyPath is the location of generated private keys for users. If nil, private keys won't be written to disk
-	KeyPath string
 	// ClientConfigs is the location to write generated client configs to. If nil or blank this will not be written to disk
 	ClientConfigPath string
 	// ClientListPath is the location of the file that stores the list of configured clients, their IP and public key. No private data
@@ -35,6 +33,7 @@ type WGClient struct {
 // right now this only accepts ClientName and builds everything else
 type NewUser struct {
 	ClientName string `json:"client_name"`
+	PublicKey  string `json:"public_key"`
 	WGConf     string `json:"wg_conf"`
 }
 
@@ -83,33 +82,10 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	if err != nil {
 		return NewUser{}, err
 	}
-	// call to system to create a new user
-	// generate keys:
-	privkey, pubkey, err := createWGKey()
-	if err != nil {
-		return NewUser{}, err
-	}
 	// get a PSK
 	psk, err := createPSK()
 	if err != nil {
 		return NewUser{}, err
-	}
-	if c.KeyPath != "" {
-		keyfilename := fmt.Sprintf("%s/%s.key", c.KeyPath, newuser.ClientName)
-		err = ioutil.WriteFile(keyfilename, []byte(privkey), 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-		keyfilename = fmt.Sprintf("%s/%s.key.pub", c.KeyPath, newuser.ClientName)
-		err = ioutil.WriteFile(keyfilename, []byte(pubkey), 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-		keyfilename = fmt.Sprintf("%s/%s.psk", c.KeyPath, newuser.ClientName)
-		err = ioutil.WriteFile(keyfilename, []byte(psk), 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
 	}
 	// find an unused IP
 	ip, err := getOpenIP(c.WGConfigPath, c.ClientListPath)
@@ -120,7 +96,7 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	// TODO: make this NOT gross (should be a file template)
 	ccf := ""
 	ccf = ccf + "[Interface]\n"
-	ccf = ccf + fmt.Sprintf("PrivateKey = %s\n", privkey)
+	ccf = ccf + fmt.Sprintf("PrivateKey = %s\n", "CLIENT_PRIVATE_KEY")
 	ccf = ccf + fmt.Sprintf("Address = %s\n", ip)
 	ccf = ccf + fmt.Sprintf("DNS = %s\n", strings.Join(c.DNSServers[:], ", "))
 	ccf = ccf + "\n"
@@ -128,10 +104,10 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	ccf = ccf + fmt.Sprintf("PublicKey = %s\n", serverPubKey)
 	ccf = ccf + fmt.Sprintf("PresharedKey = %s\n", psk)
 	ccf = ccf + fmt.Sprintf("Endpoint = %s\n", c.ServerHostname)
-	// TODO: change this since that's like... the whole point of this project
+	// TODO: determine if this needs to be configurable or not?
 	ccf = ccf + fmt.Sprintf("AllowedIPs = %s\n", "0.0.0.0/0, ::0/0")
 	// return the completed new user
-	err = addUserToClientList(c.ClientListPath, newuser.ClientName, pubkey, ip)
+	err = addUserToClientList(c.ClientListPath, newuser.ClientName, newuser.PublicKey, ip)
 	if err != nil {
 		return NewUser{}, err
 	}
