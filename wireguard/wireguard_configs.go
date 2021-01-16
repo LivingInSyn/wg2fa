@@ -46,7 +46,7 @@ func parseConfig(confPath string) ([]configSection, error) {
 	}
 	defer confFile.Close()
 	// scan it breaking it down into sections
-	sections := make([]configSection, 10)
+	sections := make([]configSection, 0)
 	currentSection := newConfigSection("Default")
 	scanner := bufio.NewScanner(confFile)
 	for scanner.Scan() {
@@ -66,10 +66,12 @@ func parseConfig(confPath string) ([]configSection, error) {
 			currentSection = newConfigSection(strings.Trim(line, "[]"))
 		}
 		// otherwise, append KVPs to the current section
-		splitline := strings.Split(line, "=")
-		key := strings.Trim(splitline[0], " ")
-		value := strings.Trim(splitline[1], " ")
-		currentSection.ConfigValues[key] = value
+		splitline := strings.SplitN(line, "=", 2)
+		if len(splitline) > 1 {
+			key := strings.Trim(splitline[0], " ")
+			value := strings.Trim(splitline[1], " ")
+			currentSection.ConfigValues[key] = value
+		}
 	}
 	sections = append(sections, currentSection)
 	return sections, nil
