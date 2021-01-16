@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 const usernameRegex = "^[a-zAZ0-9\\.@_-]+$"
@@ -39,6 +40,7 @@ type NewUser struct {
 
 // Init initializes a WGClient
 func (c WGClient) Init() error {
+	log.Debug().Msg("Initializing wireguard client")
 	err := checkClientConfig(c.ClientListPath, true)
 	if err != nil {
 		return err
@@ -57,7 +59,8 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	// check the username for regex
 	match, err := regexp.MatchString(usernameRegex, newuser.ClientName)
 	if err != nil {
-		log.Fatal("Error in regex")
+		log.Error().Msg("Error in new user regex")
+		return NewUser{}, errors.New("Error in new user regex")
 	}
 	if !match {
 		return NewUser{}, errors.New("invalid username")
@@ -116,7 +119,7 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 		keyfilename := fmt.Sprintf("%s/%s.conf", c.ClientConfigPath, newuser.ClientName)
 		err = ioutil.WriteFile(keyfilename, []byte(ccf), 0644)
 		if err != nil {
-			log.Fatal(err)
+			log.Error().Str("error", err.Error()).Msg("error writing client conf")
 		}
 	}
 	newuser.WGConf = ccf

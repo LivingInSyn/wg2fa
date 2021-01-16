@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
-	"log"
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 // configSection is a configuration file ini section
@@ -57,7 +58,7 @@ func parseConfig(confPath string) ([]configSection, error) {
 		// check if we're starting a new section
 		match, err := regexp.MatchString(sectionRegex, line)
 		if err != nil {
-			log.Fatal("Error in regex")
+			log.Fatal().Msg("Error in regex while parsing wireguard config")
 		}
 		if match {
 			// append the current and start a new
@@ -75,7 +76,7 @@ func parseConfig(confPath string) ([]configSection, error) {
 }
 
 func parseClientList(confPath string) (Clients, error) {
-	jsonFile, err := os.Open("confPath")
+	jsonFile, err := os.Open(confPath)
 	if err != nil {
 		return Clients{}, err
 	}
@@ -122,7 +123,8 @@ func addUserToClientList(confPath, name, pubkey, ip string) error {
 }
 
 func checkClientConfig(confpath string, create bool) error {
-	if _, err := os.Stat("/path/to/whatever"); os.IsNotExist(err) {
+	log.Debug().Msg("checking Client Config")
+	if _, err := os.Stat(confpath); os.IsNotExist(err) {
 		if !create {
 			return errors.New("client config doesn't exist and autocreate is off")
 		}

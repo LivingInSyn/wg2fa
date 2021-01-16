@@ -2,26 +2,30 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"io/ioutil"
-	"log"
 	"net/http"
+	"time"
 
 	"./wireguard"
 
 	"github.com/gorilla/mux"
 	jwtverifier "github.com/okta/okta-jwt-verifier-golang"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 var wgclient wireguard.WGClient
 var clientID = "0oawepftsdT43o2CM0h7"
 var issuer = "https://dev-318981-admin.oktapreview.com/oauth2/default"
+var disableAuth = false
 
 // NewUser accepts POSTs of new user objects and creates a new wireguard user.
 // The returned wireguard config will require the caller to replace CLIENT_PRIVATE_KEY
 // with their private key
 func NewUser(w http.ResponseWriter, r *http.Request) {
 	btoken := r.Header.Get("Bearer")
-	if isAuthenticated(btoken) {
+	if !disableAuth && isAuthenticated(btoken) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -57,24 +61,48 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	debugFlag := flag.Bool("debug", false, "turn debug logging on")
+	turnOffAuthFlag := flag.Bool("dangerauth", false, "turn on to disable auth to the newuser API")
+	wgConfPathFlag := flag.String("wgc", "/etc/wireguard/wg0.conf", "the path to the wireguard config managed by wg2fa")
+	wgClientConfPathFlag := flag.String("cwg", "/etc/wireguard/clientConfigs", "the path to write client configs to on the disk")
+	wgClientListPathFlag := flag.String("cl", "/etc/wireguard/clientList", "the path to write the clientList to")
+	flag.Parse()
+	// setup logging
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	if *debugFlag {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+	// if we want auth to be disables for testing:
+	if *turnOffAuthFlag {
+		disableAuth = true
+	}
 	// initialize the wireguard client
 	// TODO: make these come from a conf file and
 	// from flags
 	wgclient = wireguard.WGClient{
-		WGConfigPath:     "/etc/wireguard/wg0.conf",
-		ClientConfigPath: "/etc/wireguard/clientConfigs",
-		ClientListPath:   "/etc/wireguard/clientList",
+		WGConfigPath:     *wgConfPathFlag,
+		ClientConfigPath: *wgClientConfPathFlag,
+		ClientListPath:   *wgClientListPathFlag,
 		DNSServers:       []string{"8.8.8.8, 8.8.4.4"},
+		ServerHostname:   "localhost:51280",
 	}
 	err := wgclient.Init()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Msg(err.Error())
 	}
 	r := mux.NewRouter()
 	r.HandleFunc("/", HomeHandler).Methods("GET")
 	r.HandleFunc("/newuser", NewUser).Methods("POST")
 	// start
-	http.Handle("/", r)
+	srv := &http.Server{
+		Addr: "0.0.0.0:8080",
+		// Good practice to set timeouts to avoid Slowloris attacks.
+		WriteTimeout: time.Second * 15,
+		ReadTimeout:  time.Second * 15,
+		IdleTimeout:  time.Second * 60,
+		Handler:      r, // Pass our instance of gorilla/mux in.
+	}
+	log.Fatal().Msg(srv.ListenAndServe().Error())
 }
 
 func isAuthenticated(jwt string) bool {
