@@ -2,6 +2,7 @@ package wireguard
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -9,8 +10,12 @@ import (
 	"regexp"
 	"strings"
 
+	//the following is the go-sqlite driver
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog/log"
 )
+
+var db *sql.DB
 
 // configSection is a configuration file ini section
 type configSection struct {
@@ -124,7 +129,31 @@ func addUserToClientList(confPath, name, pubkey, ip string) error {
 	return nil
 }
 
-func checkClientConfig(confpath string, create bool) error {
+func checkClientConfig(confPath string, create bool) error {
+	var err error
+	db, err = sql.Open("sqlite3", confPath)
+	if err != nil {
+		return err
+	}
+	// check that the table exists and create it if 'create' is true
+	tableExistStmt := "SELECT name FROM sqlite_master WHERE type='table' AND name='wg_user';"
+	var tableName string
+	err = db.QueryRow(tableExistStmt).Scan(&tableName)
+	if err != nil {
+		if !create {
+			log.Error().Str("error", err.Error()).Msg("table doesn't exist and create is off")
+			return errors.New("Invalid config file and create is off")
+		}
+		createStmt := "CREATE TABLE wg_user (id integer not null primary key, name text, public_key text, ip text);"
+		_, err = db.Exec(createStmt)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func oldCheckClientConfig(confpath string, create bool) error {
 	log.Debug().Msg("checking Client Config")
 	if _, err := os.Stat(confpath); os.IsNotExist(err) {
 		if !create {
