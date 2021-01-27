@@ -42,6 +42,7 @@ func NewUser(w http.ResponseWriter, r *http.Request) {
 	}
 	createdUser, err := wgclient.NewUser(newUser)
 	if err != nil {
+		log.Error().Str("error", err.Error()).Msg("Error creating new user")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
