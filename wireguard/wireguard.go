@@ -91,7 +91,7 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 		return NewUser{}, err
 	}
 	// find an unused IP
-	ip, err := getOpenIP(c.WGConfigPath, c.ClientListPath)
+	ip, err := getOpenIP(c.WGConfigPath)
 	if err != nil {
 		return NewUser{}, err
 	}
@@ -110,7 +110,7 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	// TODO: determine if this needs to be configurable or not?
 	ccf = ccf + fmt.Sprintf("AllowedIPs = %s\n", "0.0.0.0/0, ::0/0")
 	// return the completed new user
-	err = addUserToClientList(c.ClientListPath, newuser.ClientName, newuser.PublicKey, ip)
+	err = addUserToClientList(newuser.ClientName, newuser.PublicKey, ip)
 	if err != nil {
 		return NewUser{}, err
 	}
@@ -169,7 +169,7 @@ func createPSK() (string, error) {
 	return psk, nil
 }
 
-func getOpenIP(confPath, clientConfPath string) (string, error) {
+func getOpenIP(confPath string) (string, error) {
 	// get the current config and the server IP range:
 	wgConfig, err := parseConfig(confPath)
 	if err != nil {
@@ -186,15 +186,18 @@ func getOpenIP(confPath, clientConfPath string) (string, error) {
 		return "", errors.New("No IP Range string found")
 	}
 	ip, ipNet, err := net.ParseCIDR(ipRangeString)
-	currentClients, err := parseClientList(clientConfPath)
+	currentClients, err := getClients()
 	currentIPs := make(map[string]bool)
-	for _, client := range currentClients.Clients {
+	for _, client := range currentClients {
 		currentIPs[client.IP] = true
 	}
-	for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); inc(ip) {
-		if currentIPs[ip.String()] == false {
+	//add the server IP, too
+	currentIPs[ip.String()] = true
+	// for nip := ip.Mask(ipNet.Mask); ipNet.Contains(nip); inc(nip) {
+	for nip := ip; ipNet.Contains(nip); inc(nip) {
+		if currentIPs[nip.String()] == false {
 			cidr := strings.Split(ipRangeString, "/")[1]
-			return fmt.Sprintf("%s/%s", ip.String(), cidr), nil
+			return fmt.Sprintf("%s/%s", nip.String(), cidr), nil
 		}
 	}
 	return "", errors.New("IP Space exhausted")
