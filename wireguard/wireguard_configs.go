@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	//the following is the go-sqlite driver
 	_ "github.com/mattn/go-sqlite3"
@@ -23,9 +24,10 @@ type configSection struct {
 
 // ClientConfig is an entry in the list of clients
 type clientConfig struct {
-	Name      string `json:"name"`
-	PublicKey string `json:"public_key"`
-	IP        string `json:"ip"`
+	Name      string    `json:"name"`
+	PublicKey string    `json:"public_key"`
+	IP        string    `json:"ip"`
+	Updated   time.Time `json:"updated"`
 }
 
 // Clients is the struct of clientConfigs
@@ -82,7 +84,7 @@ func parseConfig(confPath string) ([]configSection, error) {
 
 func getClients() ([]clientConfig, error) {
 	clients := make([]clientConfig, 0)
-	rows, err := db.Query("select name, public_key, ip from wg_user")
+	rows, err := db.Query("select name, public_key, ip, updated from wg_user")
 	if err != nil {
 		log.Error().AnErr("error selecting from sqlite", err)
 		return clients, errors.New("error selecting from sqlite")
@@ -90,11 +92,19 @@ func getClients() ([]clientConfig, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var cf clientConfig
-		err = rows.Scan(&cf.Name, &cf.PublicKey, &cf.IP)
+		var timeString string
+		err = rows.Scan(&cf.Name, &cf.PublicKey, &cf.IP, &timeString)
 		if err != nil {
 			log.Error().AnErr("error scanning row", err)
 			return clients, errors.New("error selecting from sqlite")
 		}
+		//parse the time string and set it in cf
+		uTime, err := time.Parse(time.RFC3339, timeString)
+		if err != nil {
+			log.Error().AnErr("error parsing updated time, skipping user", err).Str("username", cf.Name)
+			continue
+		}
+		cf.Updated = uTime
 		clients = append(clients, cf)
 	}
 	err = rows.Err()
@@ -106,8 +116,9 @@ func getClients() ([]clientConfig, error) {
 }
 
 func addUserToClientList(name, pubkey, ip string) error {
-	insertStmt := "INSERT INTO wg_user (public_key, name, ip) VALUES ($1, $2, $3);"
-	_, err := db.Exec(insertStmt, pubkey, name, ip)
+	cTime := time.Now().Format(time.RFC3339)
+	insertStmt := "INSERT INTO wg_user (public_key, name, ip, updated) VALUES ($1, $2, $3, $4);"
+	_, err := db.Exec(insertStmt, pubkey, name, ip, cTime)
 	if err != nil {
 		log.Error().AnErr("error inserting into client table", err)
 		return err
@@ -130,7 +141,7 @@ func checkClientConfig(confPath string, create bool) error {
 			log.Error().Str("error", err.Error()).Msg("table doesn't exist and create is off")
 			return errors.New("Invalid config file and create is off")
 		}
-		createStmt := "CREATE TABLE wg_user (public_key text not null primary key, name text, ip text);"
+		createStmt := "CREATE TABLE wg_user (public_key text not null primary key, name text, ip text, updated text);"
 		_, err = db.Exec(createStmt)
 		if err != nil {
 			return err
