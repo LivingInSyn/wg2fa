@@ -110,7 +110,7 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	// TODO: determine if this needs to be configurable or not?
 	ccf = ccf + fmt.Sprintf("AllowedIPs = %s\n", "0.0.0.0/0, ::0/0")
 	// return the completed new user
-	err = addUserToClientList(c.ClientListPath, newuser.ClientName, newuser.PublicKey, ip)
+	err = addUserToClientList(newuser.ClientName, newuser.PublicKey, ip)
 	if err != nil {
 		return NewUser{}, err
 	}
@@ -188,7 +188,7 @@ func getOpenIP(confPath, clientConfPath string) (string, error) {
 	ip, ipNet, err := net.ParseCIDR(ipRangeString)
 	currentClients, err := parseClientList(clientConfPath)
 	currentIPs := make(map[string]bool)
-	for _, client := range currentClients.Clients {
+	for _, client := range currentClients {
 		currentIPs[client.IP] = true
 	}
 	for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); inc(ip) {

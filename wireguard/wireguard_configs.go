@@ -3,9 +3,7 @@ package wireguard
 import (
 	"bufio"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
@@ -82,49 +80,36 @@ func parseConfig(confPath string) ([]configSection, error) {
 	return sections, nil
 }
 
-func parseClientList(confPath string) (Clients, error) {
-	jsonFile, err := os.Open(confPath)
+func parseClientList(confPath string) ([]clientConfig, error) {
+	clients := make([]clientConfig, 0)
+	rows, err := db.Query("select name, public_key, ip from wg_user")
 	if err != nil {
-		return Clients{}, err
+		log.Error().AnErr("error selecting from sqlite", err)
+		return clients, errors.New("error selecting from sqlite")
 	}
-	defer jsonFile.Close()
-	confBytes, _ := ioutil.ReadAll(jsonFile)
-	var allClients Clients
-	json.Unmarshal(confBytes, &allClients)
-	return allClients, nil
+	defer rows.Close()
+	for rows.Next() {
+		var cf clientConfig
+		err = rows.Scan(&cf.Name, &cf.PublicKey, &cf.IP)
+		if err != nil {
+			log.Error().AnErr("error scanning row", err)
+			return clients, errors.New("error selecting from sqlite")
+		}
+		clients = append(clients, cf)
+	}
+	err = rows.Err()
+	if err != nil {
+		log.Error().AnErr("rows err", err)
+		return clients, errors.New("error selecting from sqlite")
+	}
+	return clients, nil
 }
 
-func addUserToClientList(confPath, name, pubkey, ip string) error {
-	//get the current config
-	clientConf, err := parseClientList(confPath)
+func addUserToClientList(name, pubkey, ip string) error {
+	insertStmt := "INSERT INTO wg_user (public_key, name, ip) VALUES ($1, $2, $3);"
+	_, err := db.Exec(insertStmt, pubkey, name, ip)
 	if err != nil {
-		return err
-	}
-	newclient := clientConfig{
-		Name:      name,
-		PublicKey: pubkey,
-		IP:        ip,
-	}
-	clientConf.Clients = append(clientConf.Clients, newclient)
-	//json dump the clientConf and write it to a file
-	newConf, err := json.Marshal(clientConf)
-	if err != nil {
-		return err
-	}
-	confFile, err := os.Open(confPath)
-	if err != nil {
-		return err
-	}
-	defer confFile.Close()
-	//clear the old
-	err = confFile.Truncate(0)
-	if err != nil {
-		return err
-	}
-	//write the new
-	_, err = confFile.Write(newConf)
-	if err != nil {
-		return err
+		log.Error().AnErr("error inserting into client table", err)
 	}
 	return nil
 }
@@ -144,33 +129,11 @@ func checkClientConfig(confPath string, create bool) error {
 			log.Error().Str("error", err.Error()).Msg("table doesn't exist and create is off")
 			return errors.New("Invalid config file and create is off")
 		}
-		createStmt := "CREATE TABLE wg_user (id integer not null primary key, name text, public_key text, ip text);"
+		createStmt := "CREATE TABLE wg_user (public_key text not null primary key, name text, ip text);"
 		_, err = db.Exec(createStmt)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func oldCheckClientConfig(confpath string, create bool) error {
-	log.Debug().Msg("checking Client Config")
-	if _, err := os.Stat(confpath); os.IsNotExist(err) {
-		if !create {
-			return errors.New("client config doesn't exist and autocreate is off")
-		}
-		//make a file
-		c := Clients{}
-		c.Clients = make([]clientConfig, 1)
-		objbytes, err := json.Marshal(c)
-		if err != nil {
-			return err
-		}
-		err = ioutil.WriteFile(confpath, objbytes, 0644)
-		if err != nil {
-			return err
-		}
-	}
-	_, err := parseClientList(confpath)
-	return err
 }
