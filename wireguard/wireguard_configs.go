@@ -80,7 +80,7 @@ func parseConfig(confPath string) ([]configSection, error) {
 	return sections, nil
 }
 
-func parseClientList(confPath string) ([]clientConfig, error) {
+func getClients() ([]clientConfig, error) {
 	clients := make([]clientConfig, 0)
 	rows, err := db.Query("select name, public_key, ip from wg_user")
 	if err != nil {
@@ -110,6 +110,7 @@ func addUserToClientList(name, pubkey, ip string) error {
 	_, err := db.Exec(insertStmt, pubkey, name, ip)
 	if err != nil {
 		log.Error().AnErr("error inserting into client table", err)
+		return err
 	}
 	return nil
 }
@@ -136,4 +137,11 @@ func checkClientConfig(confPath string, create bool) error {
 		}
 	}
 	return nil
+}
+
+func closeWgConfig() {
+	err := db.Close()
+	if err != nil {
+		log.Error().AnErr("error closing WG config DB", err)
+	}
 }
