@@ -126,6 +126,14 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	return newuser, nil
 }
 
+// RemoveUser deletes a user
+func (c WGClient) RemoveUser(pubkey string) error {
+	//remove from the wgconfig
+	//remove from the clientlist
+	removeClientFromDb(pubkey)
+	return nil
+}
+
 func createWGKey() (string, string, error) {
 	// create a new private key
 	privkeyBytes, err := exec.Command("wg", "genkey").Output()

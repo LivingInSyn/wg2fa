@@ -115,6 +115,16 @@ func getClients() ([]clientConfig, error) {
 	return clients, nil
 }
 
+func removeClientFromDb(pubKey string) error {
+	delStmt := "DELETE FROM wg_user WHERE public_key = $1;"
+	_, err := db.Exec(delStmt, pubKey)
+	if err != nil {
+		log.Error().AnErr("error deleting client", err)
+		return errors.New("couldn't delete client")
+	}
+	return nil
+}
+
 func addUserToClientList(name, pubkey, ip string) error {
 	cTime := time.Now().Format(time.RFC3339)
 	insertStmt := "INSERT INTO wg_user (public_key, name, ip, updated) VALUES ($1, $2, $3, $4);"
