@@ -34,6 +34,12 @@ type clientConfData struct {
 	ServerHostname string
 }
 
+type serverCConfData struct {
+	PublicKey string
+	PSK       string
+	IP        string
+}
+
 // ClientConfig is an entry in the list of clients
 type clientConfig struct {
 	Name      string    `json:"name"`
@@ -196,6 +202,29 @@ func buildClientConfigFile(ccd *clientConfData) (string, error) {
 	// execute it and read it into a string
 	var tbuffer bytes.Buffer
 	err = tmpl.Execute(&tbuffer, ccd)
+	if err != nil {
+		log.Error().AnErr("couldn't execute client template", err)
+		return "", err
+	}
+	return tbuffer.String(), nil
+}
+
+func buildServerConfigBlock(sccd *serverCConfData) (string, error) {
+	path := filepath.Join(".", "text_templates", "cserver_client_entry.txt")
+	templText, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Error().AnErr("couldn't read server client config", err)
+		return "", err
+	}
+	// create a template
+	tmpl, err := template.New("srvClientTempl").Parse(string(templText))
+	if err != nil {
+		log.Error().AnErr("couldn't template server client config", err)
+		return "", err
+	}
+	// execute it and read it into a string
+	var tbuffer bytes.Buffer
+	err = tmpl.Execute(&tbuffer, sccd)
 	if err != nil {
 		log.Error().AnErr("couldn't execute client template", err)
 		return "", err

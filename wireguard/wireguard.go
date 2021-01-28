@@ -16,6 +16,8 @@ import (
 const usernameRegex = "^[a-zAZ0-9\\.@_-]+$"
 const sectionRegex = "^\\[[a-zA-Z0-9]+\\]$"
 
+var serverPubKey string
+
 // WGClient is a struct defining the config of wireguard
 type WGClient struct {
 	// WGConfigPath is the path to the wireguard config to manage
@@ -51,6 +53,25 @@ func (c WGClient) Init() error {
 	if c.ServerHostname == "" || !strings.Contains(c.ServerHostname, ":") {
 		return errors.New("Invalid server hostname string")
 	}
+	// get and set the server public key
+	wgConfig, err := parseConfig(c.WGConfigPath)
+	if err != nil {
+		return err
+	}
+	serverPrivkey := ""
+	for _, configSection := range wgConfig {
+		if configSection.SectionName == "Interface" {
+			serverPrivkey = configSection.ConfigValues["PrivateKey"]
+			break
+		}
+	}
+	if serverPrivkey == "" {
+		return errors.New("No server private key found")
+	}
+	serverPubKey, err = getPubKey(serverPrivkey)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -64,26 +85,6 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	}
 	if !match {
 		return NewUser{}, errors.New("invalid username")
-	}
-	// get the current wireguard config
-	wgConfig, err := parseConfig(c.WGConfigPath)
-	if err != nil {
-		return NewUser{}, err
-	}
-	// get the public key:
-	serverPrivkey := ""
-	for _, configSection := range wgConfig {
-		if configSection.SectionName == "Interface" {
-			serverPrivkey = configSection.ConfigValues["PrivateKey"]
-			break
-		}
-	}
-	if serverPrivkey == "" {
-		return NewUser{}, errors.New("No server private key found")
-	}
-	serverPubKey, err := getPubKey(serverPrivkey)
-	if err != nil {
-		return NewUser{}, err
 	}
 	// get a PSK
 	psk, err := createPSK()
@@ -107,6 +108,15 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	if err != nil {
 		return NewUser{}, err
 	}
+	// build the new users server config block and add it to the file
+	sccd := serverCConfData{
+		PublicKey: newuser.PublicKey,
+		PSK:       psk,
+		IP:        ip,
+	}
+	sccf, err := buildServerConfigBlock(&sccd)
+	// todo: write sccf to the server config file
+	_ = sccf
 	// return the completed new user
 	err = addClientToDb(newuser.ClientName, newuser.PublicKey, ip)
 	if err != nil {
