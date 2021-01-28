@@ -1,0 +1,9 @@
+[Interface]
+PrivateKey = CLIENT_PRIVATE_KEY
+Address = %s
+DNS = %s
+
+[Peer]
+PublicKey = %s
+PresharedKey = %s
+Endpoint = %s

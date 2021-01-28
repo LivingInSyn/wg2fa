@@ -1,0 +1,4 @@
+[Peer]
+PublicKey = %s
+PresharedKey = %s
+AllowedIPs = %s
