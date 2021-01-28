@@ -2,9 +2,13 @@ package wireguard
 
 import (
 	"bufio"
+	"bytes"
 	"database/sql"
 	"errors"
+	"html/template"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -20,6 +24,14 @@ var db *sql.DB
 type configSection struct {
 	SectionName  string
 	ConfigValues map[string]string
+}
+
+type clientConfData struct {
+	ClientIP       string
+	DNS            string
+	ServerPubKey   string
+	PSK            string
+	ServerHostname string
 }
 
 // ClientConfig is an entry in the list of clients
@@ -125,7 +137,7 @@ func removeClientFromDb(pubKey string) error {
 	return nil
 }
 
-func addUserToClientList(name, pubkey, ip string) error {
+func addClientToDb(name, pubkey, ip string) error {
 	cTime := time.Now().Format(time.RFC3339)
 	insertStmt := "INSERT INTO wg_user (public_key, name, ip, updated) VALUES ($1, $2, $3, $4);"
 	_, err := db.Exec(insertStmt, pubkey, name, ip, cTime)
@@ -136,7 +148,7 @@ func addUserToClientList(name, pubkey, ip string) error {
 	return nil
 }
 
-func checkClientConfig(confPath string, create bool) error {
+func checkClientDb(confPath string, create bool) error {
 	var err error
 	db, err = sql.Open("sqlite3", confPath)
 	if err != nil {
@@ -160,9 +172,33 @@ func checkClientConfig(confPath string, create bool) error {
 	return nil
 }
 
-func closeWgConfig() {
+func closeClientDb() {
 	err := db.Close()
 	if err != nil {
 		log.Error().AnErr("error closing WG config DB", err)
 	}
+}
+
+func buildClientConfigFile(ccd *clientConfData) (string, error) {
+	//read the template into a file
+	path := filepath.Join(".", "text_templates", "client_config.txt")
+	templText, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Error().AnErr("couldn't read client config", err)
+		return "", err
+	}
+	// create a template
+	tmpl, err := template.New("clientTempl").Parse(string(templText))
+	if err != nil {
+		log.Error().AnErr("couldn't template client config", err)
+		return "", err
+	}
+	// execute it and read it into a string
+	var tbuffer bytes.Buffer
+	err = tmpl.Execute(&tbuffer, ccd)
+	if err != nil {
+		log.Error().AnErr("couldn't execute client template", err)
+		return "", err
+	}
+	return tbuffer.String(), nil
 }

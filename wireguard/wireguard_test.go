@@ -39,11 +39,11 @@ func TestParseConfig(t *testing.T) {
 
 func TestCheckClientConfigCreate(t *testing.T) {
 	confpath := filepath.Join("..", "test", "cc_create.db")
-	err := checkClientConfig(confpath, true)
+	err := checkClientDb(confpath, true)
 	if err != nil {
 		t.Errorf("error creating checking/creating client config")
 	}
-	closeWgConfig()
+	closeClientDb()
 	deleteFile(confpath)
 }
 
@@ -64,11 +64,11 @@ func TestAddGetClients(t *testing.T) {
 		t.Errorf("error creating checking/creating client config")
 	}
 	// add two users
-	err = addUserToClientList("bob", "abc123", "192.168.1.1")
+	err = addClientToDb("bob", "abc123", "192.168.1.1")
 	if err != nil {
 		t.Errorf("error adding first user")
 	}
-	err = addUserToClientList("tom", "abc456", "192.168.1.100")
+	err = addClientToDb("tom", "abc456", "192.168.1.100")
 	if err != nil {
 		t.Errorf("error adding second user")
 	}
@@ -80,7 +80,7 @@ func TestAddGetClients(t *testing.T) {
 	if len(clients) != 2 {
 		t.Errorf("wrong number of clients")
 	}
-	closeWgConfig()
+	closeClientDb()
 	deleteFile(confpath)
 }
 
@@ -92,11 +92,11 @@ func TestOpenIP(t *testing.T) {
 		t.Errorf("error creating checking/creating client config")
 	}
 	// add two users
-	err = addUserToClientList("bob", "abc123", "10.0.0.2")
+	err = addClientToDb("bob", "abc123", "10.0.0.2")
 	if err != nil {
 		t.Errorf("error adding first user")
 	}
-	err = addUserToClientList("tom", "abc456", "10.0.0.200")
+	err = addClientToDb("tom", "abc456", "10.0.0.200")
 	if err != nil {
 		t.Errorf("error adding second user")
 	}
@@ -109,7 +109,7 @@ func TestOpenIP(t *testing.T) {
 	if ip != "10.0.0.3/24" {
 		t.Errorf("wrong IP returned")
 	}
-	closeWgConfig()
+	closeClientDb()
 	deleteFile(confpath)
 }
 

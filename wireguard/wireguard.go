@@ -41,7 +41,7 @@ type NewUser struct {
 // Init initializes a WGClient
 func (c WGClient) Init() error {
 	log.Debug().Msg("Initializing wireguard client")
-	err := checkClientConfig(c.ClientListPath, true)
+	err := checkClientDb(c.ClientListPath, true)
 	if err != nil {
 		return err
 	}
@@ -96,21 +96,19 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 		return NewUser{}, err
 	}
 	// now build the config string:
-	// TODO: make this NOT gross (should be a file template)
-	ccf := ""
-	ccf = ccf + "[Interface]\n"
-	ccf = ccf + fmt.Sprintf("PrivateKey = %s\n", "CLIENT_PRIVATE_KEY")
-	ccf = ccf + fmt.Sprintf("Address = %s\n", ip)
-	ccf = ccf + fmt.Sprintf("DNS = %s\n", strings.Join(c.DNSServers[:], ", "))
-	ccf = ccf + "\n"
-	ccf = ccf + "[Peer]\n"
-	ccf = ccf + fmt.Sprintf("PublicKey = %s\n", serverPubKey)
-	ccf = ccf + fmt.Sprintf("PresharedKey = %s\n", psk)
-	ccf = ccf + fmt.Sprintf("Endpoint = %s\n", c.ServerHostname)
-	// TODO: determine if this needs to be configurable or not?
-	ccf = ccf + fmt.Sprintf("AllowedIPs = %s\n", "0.0.0.0/0, ::0/0")
+	ccd := clientConfData{
+		ClientIP:       ip,
+		DNS:            strings.Join(c.DNSServers[:], ", "),
+		ServerPubKey:   serverPubKey,
+		PSK:            psk,
+		ServerHostname: c.ServerHostname,
+	}
+	ccf, err := buildClientConfigFile(&ccd)
+	if err != nil {
+		return NewUser{}, err
+	}
 	// return the completed new user
-	err = addUserToClientList(newuser.ClientName, newuser.PublicKey, ip)
+	err = addClientToDb(newuser.ClientName, newuser.PublicKey, ip)
 	if err != nil {
 		return NewUser{}, err
 	}
