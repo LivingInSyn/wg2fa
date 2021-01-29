@@ -135,7 +135,6 @@ Endpoint = example.com:12345
 	}
 	ccf, err := buildClientConfigFile(&ccd)
 	if err != nil {
-		log.Error().AnErr("template error", err)
 		t.Errorf("failed to exec template: %s", err)
 	}
 	// just in case, replace CR with nothing
@@ -146,6 +145,34 @@ Endpoint = example.com:12345
 		t.Errorf("failed to match good block")
 	}
 
+}
+
+func TestBuildServerClientBlock(t *testing.T) {
+	goodBlock := `[Peer]
+PublicKey = abc123
+PresharedKey = def456
+AllowedIPs = 10.0.0.5/24
+`
+
+	serverTemplatePath = filepath.Join("..", "text_templates", "server_client_entry.txt")
+	sccd := serverCConfData{
+		PublicKey: "abc123",
+		PSK:       "def456",
+		IP:        "10.0.0.5/24",
+	}
+	sccf, err := buildServerConfigBlock(&sccd)
+	if err != nil {
+		t.Errorf("failed to exec template: %s", err)
+	}
+	sccf = strings.Replace(sccf, "\r", "", -1)
+	if !strings.HasPrefix(sccf, goodBlock) {
+		// for i, c := range sccf {
+		// 	t.Logf("%d %c %c", i, c, goodBlock[i])
+		// }
+		t.Logf("good: %s", goodBlock)
+		t.Logf("bad: %s", sccf)
+		t.Errorf("failed to match good block")
+	}
 }
 
 func deleteFile(path string) {
