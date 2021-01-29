@@ -193,6 +193,9 @@ func createPSK() (string, error) {
 }
 
 func addUserToSConf(path, scb string, scd *serverCConfData) error {
+	// sudo wg set wg0 peer <Client Public Key> endpoint <Client IP address>:51820 allowed-ips 203.0.113.12/24,fd86:ea04:1115::5/64
+	// wg set ${INTERFACE} peer ${PUBLIC_KEY} preshared-key <(echo ${PRESHARED_KEY}) allowed-ips ${PEER_ADDRESS}
+	// command := []string {"sudo", "wg", "set", "wg0", "peer", scd.PublicKey, "allowed-ips"}
 	// check for dup public keys and error on presence
 	confSections, err := parseConfig(path)
 	if err != nil {
