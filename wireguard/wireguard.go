@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -116,7 +117,13 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	}
 	sccf, err := buildServerConfigBlock(&sccd)
 	// todo: write sccf to the server config file
-	_ = sccf
+	err = addUserToSConf(c.WGConfigPath, sccf, &sccd)
+	if err != nil {
+		return NewUser{}, errors.New("Couldn't write to wg config file")
+	}
+	// finally, quick restart the wg server async
+	// TODO: (is this REQUIRED??)
+
 	// return the completed new user
 	err = addClientToDb(newuser.ClientName, newuser.PublicKey, ip)
 	if err != nil {
@@ -183,6 +190,41 @@ func createPSK() (string, error) {
 	}
 	psk := string(pskBytes)
 	return psk, nil
+}
+
+func addUserToSConf(path, scb string, scd *serverCConfData) error {
+	// check for dup public keys and error on presence
+	confSections, err := parseConfig(path)
+	if err != nil {
+		return err
+	}
+	for _, sec := range confSections {
+		// check if it's a peer:
+		if strings.ToLower(sec.SectionName) == "peer" {
+			//check the pubkey
+			pubkey, ok := sec.ConfigValues["PublicKey"]
+			if ok {
+				if pubkey == *&scd.PublicKey {
+					return errors.New("peer with that public key already exists")
+				}
+			} else {
+				log.Warn().Msg("peer exists with no public key")
+			}
+		}
+	}
+	// add user to it by reading the file
+	f, err := os.OpenFile(path,
+		os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error().AnErr("error opening server config file for writing", err)
+		return err
+	}
+	defer f.Close()
+	if _, err := f.WriteString(scb); err != nil {
+		log.Error().AnErr("error writing to server config file", err)
+		return err
+	}
+	return nil
 }
 
 func getOpenIP(confPath string) (string, error) {

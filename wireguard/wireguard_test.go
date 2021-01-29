@@ -148,10 +148,12 @@ Endpoint = example.com:12345
 }
 
 func TestBuildServerClientBlock(t *testing.T) {
-	goodBlock := `[Peer]
+	goodBlock := `# abc123
+[Peer]
 PublicKey = abc123
 PresharedKey = def456
 AllowedIPs = 10.0.0.5/24
+# /abc123
 `
 
 	serverTemplatePath = filepath.Join("..", "text_templates", "server_client_entry.txt")

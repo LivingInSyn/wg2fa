@@ -1,4 +1,6 @@
+# {{.PublicKey}}
 [Peer]
 PublicKey = {{.PublicKey}}
 PresharedKey = {{.PSK}}
 AllowedIPs = {{.IP}}
+# /{{.PublicKey}}
