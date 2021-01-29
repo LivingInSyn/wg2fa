@@ -6,4 +6,4 @@ DNS = {{.DNS}}
 [Peer]
 PublicKey = {{.ServerPubKey}}
 PresharedKey = {{.PSK}}
-Endpoint = {{.ServerHostName}}
+Endpoint = {{.ServerHostname}}

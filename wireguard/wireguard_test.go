@@ -3,6 +3,7 @@ package wireguard
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rs/zerolog/log"
@@ -49,7 +50,7 @@ func TestCheckClientConfigCreate(t *testing.T) {
 
 func TestCheckClientConfigNoCreate(t *testing.T) {
 	confpath := filepath.Join("..", "test", "no_create.db")
-	err := checkClientConfig(confpath, false)
+	err := checkClientDb(confpath, false)
 	if err == nil {
 		t.Errorf("we should get an error here")
 	}
@@ -59,7 +60,7 @@ func TestCheckClientConfigNoCreate(t *testing.T) {
 func TestAddGetClients(t *testing.T) {
 	confpath := filepath.Join("..", "test", "addgetclient.db")
 	// call check/create to make sure we have a db
-	err := checkClientConfig(confpath, true)
+	err := checkClientDb(confpath, true)
 	if err != nil {
 		t.Errorf("error creating checking/creating client config")
 	}
@@ -87,7 +88,7 @@ func TestAddGetClients(t *testing.T) {
 func TestOpenIP(t *testing.T) {
 	confpath := filepath.Join("..", "test", "addgetclient.db")
 	// call check/create to make sure we have a db
-	err := checkClientConfig(confpath, true)
+	err := checkClientDb(confpath, true)
 	if err != nil {
 		t.Errorf("error creating checking/creating client config")
 	}
@@ -111,6 +112,40 @@ func TestOpenIP(t *testing.T) {
 	}
 	closeClientDb()
 	deleteFile(confpath)
+}
+
+func TestBuildClientConfig(t *testing.T) {
+	goodBlock := `[Interface]
+PrivateKey = CLIENT_PRIVATE_KEY
+Address = 10.0.0.5/24
+DNS = 8.8.8.8, 8.8.4.4
+
+[Peer]
+PublicKey = abc123
+PresharedKey = def456
+Endpoint = example.com:12345
+`
+	clientTemplatePath = filepath.Join("..", "text_templates", "client_config.txt")
+	ccd := clientConfData{
+		ClientIP:       "10.0.0.5/24",
+		DNS:            "8.8.8.8, 8.8.4.4",
+		ServerPubKey:   "abc123",
+		PSK:            "def456",
+		ServerHostname: "example.com:12345",
+	}
+	ccf, err := buildClientConfigFile(&ccd)
+	if err != nil {
+		log.Error().AnErr("template error", err)
+		t.Errorf("failed to exec template: %s", err)
+	}
+	// just in case, replace CR with nothing
+	ccf = strings.Replace(ccf, "\r", "", -1)
+	if !strings.HasPrefix(ccf, goodBlock) {
+		t.Logf("good: %s", goodBlock)
+		t.Logf("bad: %s", ccf)
+		t.Errorf("failed to match good block")
+	}
+
 }
 
 func deleteFile(path string) {

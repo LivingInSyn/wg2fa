@@ -19,6 +19,8 @@ import (
 )
 
 var db *sql.DB
+var clientTemplatePath = filepath.Join(".", "text_templates", "client_config.txt")
+var serverTemplatePath = filepath.Join(".", "text_templates", "cserver_client_entry.txt")
 
 // configSection is a configuration file ini section
 type configSection struct {
@@ -187,7 +189,7 @@ func closeClientDb() {
 
 func buildClientConfigFile(ccd *clientConfData) (string, error) {
 	//read the template into a file
-	path := filepath.Join(".", "text_templates", "client_config.txt")
+	path := clientTemplatePath
 	templText, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.Error().AnErr("couldn't read client config", err)
@@ -210,7 +212,7 @@ func buildClientConfigFile(ccd *clientConfData) (string, error) {
 }
 
 func buildServerConfigBlock(sccd *serverCConfData) (string, error) {
-	path := filepath.Join(".", "text_templates", "cserver_client_entry.txt")
+	path := serverTemplatePath
 	templText, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.Error().AnErr("couldn't read server client config", err)
