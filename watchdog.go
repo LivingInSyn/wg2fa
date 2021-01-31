@@ -3,7 +3,6 @@ package main
 import (
 	"time"
 
-	"./wireguard"
 	"github.com/rs/zerolog/log"
 )
 
@@ -16,17 +15,17 @@ type removeClientConfig struct {
 	IdleTime int64
 }
 
-func watchdog(wgc *wireguard.WGClient, rc *removeClientConfig) {
+func watchdog(wgc *WGClient, rc *removeClientConfig) {
 	for {
 		time.Sleep(30 * time.Second)
 		// get all the users
-		clients, err := wireguard.GetClients()
+		clients, err := getClients()
 		if err != nil {
 			log.Error().AnErr("error getting clients from DB", err)
 			continue
 		}
 		// get last handshakes
-		lastHandshakes, err := wgc.GetLastHandshakes()
+		lastHandshakes, err := wgc.getLastHandshakes()
 		if err != nil {
 			log.Error().AnErr("Error getting last handshakes", err)
 			continue
@@ -35,7 +34,7 @@ func watchdog(wgc *wireguard.WGClient, rc *removeClientConfig) {
 			if rc.ForceTime > 0 {
 				minAgo := time.Now().Add(-1 * time.Duration(rc.ForceTime))
 				if client.Added.Before(minAgo) {
-					wgc.RemoveUser(client.PublicKey)
+					wgc.removeUser(client.PublicKey)
 					continue
 				}
 			}
@@ -43,7 +42,7 @@ func watchdog(wgc *wireguard.WGClient, rc *removeClientConfig) {
 				lastHandshake := lastHandshakes[client.PublicKey]
 				minAgo := time.Now().Add(-1 * time.Duration(rc.IdleTime))
 				if lastHandshake.Before(minAgo) {
-					wgc.RemoveUser(client.PublicKey)
+					wgc.removeUser(client.PublicKey)
 				}
 			}
 		}
