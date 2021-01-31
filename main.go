@@ -88,6 +88,7 @@ func main() {
 		ClientListPath: *wgClientListPathFlag,
 		DNSServers:     []string{"8.8.8.8, 8.8.4.4"},
 		ServerHostname: "localhost:51280",
+		InterfaceName:  "wg0",
 	}
 	err := wgclient.Init()
 	if err != nil {

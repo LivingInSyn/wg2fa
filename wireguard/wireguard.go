@@ -56,6 +56,10 @@ func (c WGClient) Init() error {
 	if c.ServerHostname == "" || !strings.Contains(c.ServerHostname, ":") {
 		return errors.New("Invalid server hostname string")
 	}
+	if c.InterfaceName == "" {
+		// TODO: more robust check of interface name here
+		return errors.New("invalid interface name")
+	}
 	// get and set the server public key
 	wgConfig, err := parseConfig(c.WGConfigPath)
 	if err != nil {
