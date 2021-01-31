@@ -68,6 +68,8 @@ func main() {
 	wgClientListPathFlag := flag.String("cl", "/etc/wireguard/clientList", "the path to write the clientList to")
 	ForceTimeFlag := flag.Int64("f", -1, "The number of minutes since auth to force a reauth regardless of activity")
 	IdleTimeFlag := flag.Int64("i", 10, "The number of minutes since last activity to force a reauth")
+	//TODO:
+	// ForceRecreateFlag := flag.Bool("force-recreate", false, "force the recreation of the user database and clearing all authenticated users")
 	flag.Parse()
 	// setup logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix

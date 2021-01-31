@@ -48,5 +48,4 @@ func watchdog(wgc *wireguard.WGClient, rc *removeClientConfig) {
 			}
 		}
 	}
-
 }
