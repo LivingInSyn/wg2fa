@@ -6,9 +6,12 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -16,12 +19,14 @@ import (
 const usernameRegex = "^[a-zAZ0-9\\.@_-]+$"
 const sectionRegex = "^\\[[a-zA-Z0-9]+\\]$"
 
+var serverPubKey string
+
 // WGClient is a struct defining the config of wireguard
 type WGClient struct {
 	// WGConfigPath is the path to the wireguard config to manage
 	WGConfigPath string
-	// ClientConfigs is the location to write generated client configs to. If nil or blank this will not be written to disk
-	ClientConfigPath string
+	// InterfaceName is the name of the interface (wg0, etc.)
+	InterfaceName string
 	// ClientListPath is the location of the file that stores the list of configured clients, their IP and public key. No private data
 	ClientListPath string
 	// DNS is a slice of strings for what DNS servers to configure
@@ -41,7 +46,7 @@ type NewUser struct {
 // Init initializes a WGClient
 func (c WGClient) Init() error {
 	log.Debug().Msg("Initializing wireguard client")
-	err := checkClientConfig(c.ClientListPath, true)
+	err := checkClientDb(c.ClientListPath, true)
 	if err != nil {
 		return err
 	}
@@ -50,6 +55,25 @@ func (c WGClient) Init() error {
 	// TODO: check DNSServers for sanity. Len > 0 and proper IPs
 	if c.ServerHostname == "" || !strings.Contains(c.ServerHostname, ":") {
 		return errors.New("Invalid server hostname string")
+	}
+	// get and set the server public key
+	wgConfig, err := parseConfig(c.WGConfigPath)
+	if err != nil {
+		return err
+	}
+	serverPrivkey := ""
+	for _, configSection := range wgConfig {
+		if configSection.SectionName == "Interface" {
+			serverPrivkey = configSection.ConfigValues["PrivateKey"]
+			break
+		}
+	}
+	if serverPrivkey == "" {
+		return errors.New("No server private key found")
+	}
+	serverPubKey, err = getPubKey(serverPrivkey)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -65,26 +89,6 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 	if !match {
 		return NewUser{}, errors.New("invalid username")
 	}
-	// get the current wireguard config
-	wgConfig, err := parseConfig(c.WGConfigPath)
-	if err != nil {
-		return NewUser{}, err
-	}
-	// get the public key:
-	serverPrivkey := ""
-	for _, configSection := range wgConfig {
-		if configSection.SectionName == "Interface" {
-			serverPrivkey = configSection.ConfigValues["PrivateKey"]
-			break
-		}
-	}
-	if serverPrivkey == "" {
-		return NewUser{}, errors.New("No server private key found")
-	}
-	serverPubKey, err := getPubKey(serverPrivkey)
-	if err != nil {
-		return NewUser{}, err
-	}
 	// get a PSK
 	psk, err := createPSK()
 	if err != nil {
@@ -96,34 +100,80 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 		return NewUser{}, err
 	}
 	// now build the config string:
-	// TODO: make this NOT gross (should be a file template)
-	ccf := ""
-	ccf = ccf + "[Interface]\n"
-	ccf = ccf + fmt.Sprintf("PrivateKey = %s\n", "CLIENT_PRIVATE_KEY")
-	ccf = ccf + fmt.Sprintf("Address = %s\n", ip)
-	ccf = ccf + fmt.Sprintf("DNS = %s\n", strings.Join(c.DNSServers[:], ", "))
-	ccf = ccf + "\n"
-	ccf = ccf + "[Peer]\n"
-	ccf = ccf + fmt.Sprintf("PublicKey = %s\n", serverPubKey)
-	ccf = ccf + fmt.Sprintf("PresharedKey = %s\n", psk)
-	ccf = ccf + fmt.Sprintf("Endpoint = %s\n", c.ServerHostname)
-	// TODO: determine if this needs to be configurable or not?
-	ccf = ccf + fmt.Sprintf("AllowedIPs = %s\n", "0.0.0.0/0, ::0/0")
-	// return the completed new user
-	err = addUserToClientList(newuser.ClientName, newuser.PublicKey, ip)
+	ccd := clientConfData{
+		ClientIP:       ip,
+		DNS:            strings.Join(c.DNSServers[:], ", "),
+		ServerPubKey:   serverPubKey,
+		PSK:            psk,
+		ServerHostname: c.ServerHostname,
+	}
+	ccf, err := buildClientConfigFile(&ccd)
 	if err != nil {
 		return NewUser{}, err
 	}
-	// optionally write to the ClientConfigPath
-	if c.ClientConfigPath != "" {
-		keyfilename := fmt.Sprintf("%s/%s.conf", c.ClientConfigPath, newuser.ClientName)
-		err = ioutil.WriteFile(keyfilename, []byte(ccf), 0644)
-		if err != nil {
-			log.Error().Str("error", err.Error()).Msg("error writing client conf")
-		}
+	// build the new users server config block and add it to the file
+	sccd := serverCConfData{
+		PublicKey: newuser.PublicKey,
+		PSK:       psk,
+		IP:        ip,
+		Interface: c.InterfaceName,
+	}
+	// add user to config file
+	err = addUserToSConf(&sccd)
+	if err != nil {
+		return NewUser{}, errors.New("Couldn't write to client to wg config")
+	}
+	// return the completed new user
+	err = addClientToDb(newuser.ClientName, newuser.PublicKey, ip)
+	if err != nil {
+		return NewUser{}, err
 	}
 	newuser.WGConf = ccf
 	return newuser, nil
+}
+
+// RemoveUser deletes a user
+func (c WGClient) RemoveUser(pubkey string) error {
+	//remove from the wgconfig
+	commandArgs := []string{"set", c.InterfaceName, "peer", pubkey, "remove"}
+	err := exec.Command("wg", commandArgs...).Wait()
+	if err != nil {
+		log.Error().AnErr("error adding peer to wg config", err)
+		return err
+	}
+	//remove from the clientlist
+	if err = removeClientFromDb(pubkey); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetLastHandshakes returns a map of public keys to last handshake times
+func (c WGClient) GetLastHandshakes() (map[string]time.Time, error) {
+	handshakes := make(map[string]time.Time)
+	args := []string{"show", c.InterfaceName, "latest-handshakes"}
+	hsbytes, err := exec.Command("wg", args...).Output()
+	if err != nil {
+		log.Error().AnErr("error calling latest handshakes", err)
+		return handshakes, err
+	}
+	hsOut := string(hsbytes)
+	lines := strings.Split(hsOut, "\n")
+	for _, line := range lines {
+		splitline := strings.Split(line, " ")
+		pubkey := splitline[0]
+		if len(pubkey) < 5 {
+			log.Warn().Msg("invalid public key")
+		}
+		timeint, err := strconv.ParseInt(splitline[len(splitline)-1], 10, 64)
+		if err != nil {
+			log.Error().AnErr("error converting last handshake to int", err).Str("pubkey", pubkey)
+			continue
+		}
+		tm := time.Unix(timeint, 0)
+		handshakes[pubkey] = tm
+	}
+	return handshakes, nil
 }
 
 func createWGKey() (string, string, error) {
@@ -169,6 +219,34 @@ func createPSK() (string, error) {
 	return psk, nil
 }
 
+func addUserToSConf(scd *serverCConfData) error {
+	// we need to write PSK to a temp file
+	tmpFile, err := ioutil.TempFile(os.TempDir(), "wg2fa-")
+	if err != nil {
+		log.Error().AnErr("Cannot create temporary file", err)
+		return err
+	}
+	// Remember to clean up the file afterwards
+	defer os.Remove(tmpFile.Name())
+	if _, err = tmpFile.Write([]byte(scd.PSK)); err != nil {
+		log.Error().AnErr("Failed to write to temporary file", err)
+		return err
+	}
+	// close it
+	if err := tmpFile.Close(); err != nil {
+		log.Error().AnErr("error closing temp file", err)
+		return err
+	}
+	// wg set ${INTERFACE} peer ${PUBLIC_KEY} preshared-key <(echo ${PRESHARED_KEY}) allowed-ips ${PEER_ADDRESS}
+	commandArgs := []string{"set", scd.Interface, "peer", scd.PublicKey, "preshared-key", tmpFile.Name(), "allowed-ips", scd.IP}
+	err = exec.Command("wg", commandArgs...).Wait()
+	if err != nil {
+		log.Error().AnErr("error adding peer to wg config", err)
+		return err
+	}
+	return nil
+}
+
 func getOpenIP(confPath string) (string, error) {
 	// get the current config and the server IP range:
 	wgConfig, err := parseConfig(confPath)
@@ -186,7 +264,7 @@ func getOpenIP(confPath string) (string, error) {
 		return "", errors.New("No IP Range string found")
 	}
 	ip, ipNet, err := net.ParseCIDR(ipRangeString)
-	currentClients, err := getClients()
+	currentClients, err := GetClients()
 	currentIPs := make(map[string]bool)
 	for _, client := range currentClients {
 		currentIPs[client.IP] = true

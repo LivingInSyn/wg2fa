@@ -2,11 +2,16 @@ package wireguard
 
 import (
 	"bufio"
+	"bytes"
 	"database/sql"
 	"errors"
+	"html/template"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	//the following is the go-sqlite driver
 	_ "github.com/mattn/go-sqlite3"
@@ -14,6 +19,8 @@ import (
 )
 
 var db *sql.DB
+var clientTemplatePath = filepath.Join(".", "text_templates", "client_config.txt")
+var serverTemplatePath = filepath.Join(".", "text_templates", "cserver_client_entry.txt")
 
 // configSection is a configuration file ini section
 type configSection struct {
@@ -21,16 +28,27 @@ type configSection struct {
 	ConfigValues map[string]string
 }
 
-// ClientConfig is an entry in the list of clients
-type clientConfig struct {
-	Name      string `json:"name"`
-	PublicKey string `json:"public_key"`
-	IP        string `json:"ip"`
+type clientConfData struct {
+	ClientIP       string
+	DNS            string
+	ServerPubKey   string
+	PSK            string
+	ServerHostname string
 }
 
-// Clients is the struct of clientConfigs
-type Clients struct {
-	Clients []clientConfig `json:"clients"`
+type serverCConfData struct {
+	PublicKey string
+	PSK       string
+	IP        string
+	Interface string
+}
+
+// ClientConfig is an entry in the list of clients
+type ClientConfig struct {
+	Name      string    `json:"name"`
+	PublicKey string    `json:"public_key"`
+	IP        string    `json:"ip"`
+	Added     time.Time `json:"added"`
 }
 
 // newconfigSection returns a new configSection with the name initialized
@@ -80,21 +98,30 @@ func parseConfig(confPath string) ([]configSection, error) {
 	return sections, nil
 }
 
-func getClients() ([]clientConfig, error) {
-	clients := make([]clientConfig, 0)
-	rows, err := db.Query("select name, public_key, ip from wg_user")
+// GetClients returns a list of all users currently in the DB
+func GetClients() ([]ClientConfig, error) {
+	clients := make([]ClientConfig, 0)
+	rows, err := db.Query("select name, public_key, ip, added from wg_user")
 	if err != nil {
 		log.Error().AnErr("error selecting from sqlite", err)
 		return clients, errors.New("error selecting from sqlite")
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var cf clientConfig
-		err = rows.Scan(&cf.Name, &cf.PublicKey, &cf.IP)
+		var cf ClientConfig
+		var timeString string
+		err = rows.Scan(&cf.Name, &cf.PublicKey, &cf.IP, &timeString)
 		if err != nil {
 			log.Error().AnErr("error scanning row", err)
 			return clients, errors.New("error selecting from sqlite")
 		}
+		//parse the time string and set it in cf
+		uTime, err := time.Parse(time.RFC3339, timeString)
+		if err != nil {
+			log.Error().AnErr("error parsing added time, skipping user", err).Str("username", cf.Name)
+			continue
+		}
+		cf.Added = uTime
 		clients = append(clients, cf)
 	}
 	err = rows.Err()
@@ -105,9 +132,20 @@ func getClients() ([]clientConfig, error) {
 	return clients, nil
 }
 
-func addUserToClientList(name, pubkey, ip string) error {
-	insertStmt := "INSERT INTO wg_user (public_key, name, ip) VALUES ($1, $2, $3);"
-	_, err := db.Exec(insertStmt, pubkey, name, ip)
+func removeClientFromDb(pubKey string) error {
+	delStmt := "DELETE FROM wg_user WHERE public_key = $1;"
+	_, err := db.Exec(delStmt, pubKey)
+	if err != nil {
+		log.Error().AnErr("error deleting client", err)
+		return errors.New("couldn't delete client")
+	}
+	return nil
+}
+
+func addClientToDb(name, pubkey, ip string) error {
+	cTime := time.Now().Format(time.RFC3339)
+	insertStmt := "INSERT INTO wg_user (public_key, name, ip, added) VALUES ($1, $2, $3, $4);"
+	_, err := db.Exec(insertStmt, pubkey, name, ip, cTime)
 	if err != nil {
 		log.Error().AnErr("error inserting into client table", err)
 		return err
@@ -115,7 +153,7 @@ func addUserToClientList(name, pubkey, ip string) error {
 	return nil
 }
 
-func checkClientConfig(confPath string, create bool) error {
+func checkClientDb(confPath string, create bool) error {
 	var err error
 	db, err = sql.Open("sqlite3", confPath)
 	if err != nil {
@@ -130,7 +168,7 @@ func checkClientConfig(confPath string, create bool) error {
 			log.Error().Str("error", err.Error()).Msg("table doesn't exist and create is off")
 			return errors.New("Invalid config file and create is off")
 		}
-		createStmt := "CREATE TABLE wg_user (public_key text not null primary key, name text, ip text);"
+		createStmt := "CREATE TABLE wg_user (public_key text not null primary key, name text, ip text, added text);"
 		_, err = db.Exec(createStmt)
 		if err != nil {
 			return err
@@ -139,9 +177,33 @@ func checkClientConfig(confPath string, create bool) error {
 	return nil
 }
 
-func closeWgConfig() {
+func closeClientDb() {
 	err := db.Close()
 	if err != nil {
 		log.Error().AnErr("error closing WG config DB", err)
 	}
+}
+
+func buildClientConfigFile(ccd *clientConfData) (string, error) {
+	//read the template into a file
+	path := clientTemplatePath
+	templText, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Error().AnErr("couldn't read client config", err)
+		return "", err
+	}
+	// create a template
+	tmpl, err := template.New("clientTempl").Parse(string(templText))
+	if err != nil {
+		log.Error().AnErr("couldn't template client config", err)
+		return "", err
+	}
+	// execute it and read it into a string
+	var tbuffer bytes.Buffer
+	err = tmpl.Execute(&tbuffer, ccd)
+	if err != nil {
+		log.Error().AnErr("couldn't execute client template", err)
+		return "", err
+	}
+	return tbuffer.String(), nil
 }

@@ -1,0 +1,9 @@
+[Interface]
+PrivateKey = CLIENT_PRIVATE_KEY
+Address = {{.ClientIP}}
+DNS = {{.DNS}}
+
+[Peer]
+PublicKey = {{.ServerPubKey}}
+PresharedKey = {{.PSK}}
+Endpoint = {{.ServerHostname}}
