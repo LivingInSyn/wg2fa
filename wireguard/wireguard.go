@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -23,6 +25,8 @@ var serverPubKey string
 type WGClient struct {
 	// WGConfigPath is the path to the wireguard config to manage
 	WGConfigPath string
+	// InterfaceName is the name of the interface (wg0, etc.)
+	InterfaceName string
 	// ClientListPath is the location of the file that stores the list of configured clients, their IP and public key. No private data
 	ClientListPath string
 	// DNS is a slice of strings for what DNS servers to configure
@@ -112,6 +116,7 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 		PublicKey: newuser.PublicKey,
 		PSK:       psk,
 		IP:        ip,
+		Interface: c.InterfaceName,
 	}
 	// add user to config file
 	err = addUserToSConf(&sccd)
@@ -130,7 +135,7 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 // RemoveUser deletes a user
 func (c WGClient) RemoveUser(pubkey string) error {
 	//remove from the wgconfig
-	commandArgs := []string{"set", "wg0", "peer", pubkey, "remove"}
+	commandArgs := []string{"set", c.InterfaceName, "peer", pubkey, "remove"}
 	err := exec.Command("wg", commandArgs...).Wait()
 	if err != nil {
 		log.Error().AnErr("error adding peer to wg config", err)
@@ -141,6 +146,34 @@ func (c WGClient) RemoveUser(pubkey string) error {
 		return err
 	}
 	return nil
+}
+
+// GetLastHandshakes returns a map of public keys to last handshake times
+func (c WGClient) GetLastHandshakes() (map[string]time.Time, error) {
+	handshakes := make(map[string]time.Time)
+	args := []string{"show", c.InterfaceName, "latest-handshakes"}
+	hsbytes, err := exec.Command("wg", args...).Output()
+	if err != nil {
+		log.Error().AnErr("error calling latest handshakes", err)
+		return handshakes, err
+	}
+	hsOut := string(hsbytes)
+	lines := strings.Split(hsOut, "\n")
+	for _, line := range lines {
+		splitline := strings.Split(line, " ")
+		pubkey := splitline[0]
+		if len(pubkey) < 5 {
+			log.Warn().Msg("invalid public key")
+		}
+		timeint, err := strconv.ParseInt(splitline[len(splitline)-1], 10, 64)
+		if err != nil {
+			log.Error().AnErr("error converting last handshake to int", err).Str("pubkey", pubkey)
+			continue
+		}
+		tm := time.Unix(timeint, 0)
+		handshakes[pubkey] = tm
+	}
+	return handshakes, nil
 }
 
 func createWGKey() (string, string, error) {
@@ -205,7 +238,7 @@ func addUserToSConf(scd *serverCConfData) error {
 		return err
 	}
 	// wg set ${INTERFACE} peer ${PUBLIC_KEY} preshared-key <(echo ${PRESHARED_KEY}) allowed-ips ${PEER_ADDRESS}
-	commandArgs := []string{"set", "wg0", "peer", scd.PublicKey, "preshared-key", tmpFile.Name(), "allowed-ips", scd.IP}
+	commandArgs := []string{"set", scd.Interface, "peer", scd.PublicKey, "preshared-key", tmpFile.Name(), "allowed-ips", scd.IP}
 	err = exec.Command("wg", commandArgs...).Wait()
 	if err != nil {
 		log.Error().AnErr("error adding peer to wg config", err)
@@ -231,7 +264,7 @@ func getOpenIP(confPath string) (string, error) {
 		return "", errors.New("No IP Range string found")
 	}
 	ip, ipNet, err := net.ParseCIDR(ipRangeString)
-	currentClients, err := getClients()
+	currentClients, err := GetClients()
 	currentIPs := make(map[string]bool)
 	for _, client := range currentClients {
 		currentIPs[client.IP] = true

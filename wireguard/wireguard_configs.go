@@ -40,19 +40,15 @@ type serverCConfData struct {
 	PublicKey string
 	PSK       string
 	IP        string
+	Interface string
 }
 
 // ClientConfig is an entry in the list of clients
-type clientConfig struct {
+type ClientConfig struct {
 	Name      string    `json:"name"`
 	PublicKey string    `json:"public_key"`
 	IP        string    `json:"ip"`
-	Updated   time.Time `json:"updated"`
-}
-
-// Clients is the struct of clientConfigs
-type Clients struct {
-	Clients []clientConfig `json:"clients"`
+	Added     time.Time `json:"added"`
 }
 
 // newconfigSection returns a new configSection with the name initialized
@@ -102,16 +98,17 @@ func parseConfig(confPath string) ([]configSection, error) {
 	return sections, nil
 }
 
-func getClients() ([]clientConfig, error) {
-	clients := make([]clientConfig, 0)
-	rows, err := db.Query("select name, public_key, ip, updated from wg_user")
+// GetClients returns a list of all users currently in the DB
+func GetClients() ([]ClientConfig, error) {
+	clients := make([]ClientConfig, 0)
+	rows, err := db.Query("select name, public_key, ip, added from wg_user")
 	if err != nil {
 		log.Error().AnErr("error selecting from sqlite", err)
 		return clients, errors.New("error selecting from sqlite")
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var cf clientConfig
+		var cf ClientConfig
 		var timeString string
 		err = rows.Scan(&cf.Name, &cf.PublicKey, &cf.IP, &timeString)
 		if err != nil {
@@ -121,10 +118,10 @@ func getClients() ([]clientConfig, error) {
 		//parse the time string and set it in cf
 		uTime, err := time.Parse(time.RFC3339, timeString)
 		if err != nil {
-			log.Error().AnErr("error parsing updated time, skipping user", err).Str("username", cf.Name)
+			log.Error().AnErr("error parsing added time, skipping user", err).Str("username", cf.Name)
 			continue
 		}
-		cf.Updated = uTime
+		cf.Added = uTime
 		clients = append(clients, cf)
 	}
 	err = rows.Err()
@@ -147,7 +144,7 @@ func removeClientFromDb(pubKey string) error {
 
 func addClientToDb(name, pubkey, ip string) error {
 	cTime := time.Now().Format(time.RFC3339)
-	insertStmt := "INSERT INTO wg_user (public_key, name, ip, updated) VALUES ($1, $2, $3, $4);"
+	insertStmt := "INSERT INTO wg_user (public_key, name, ip, added) VALUES ($1, $2, $3, $4);"
 	_, err := db.Exec(insertStmt, pubkey, name, ip, cTime)
 	if err != nil {
 		log.Error().AnErr("error inserting into client table", err)
@@ -171,7 +168,7 @@ func checkClientDb(confPath string, create bool) error {
 			log.Error().Str("error", err.Error()).Msg("table doesn't exist and create is off")
 			return errors.New("Invalid config file and create is off")
 		}
-		createStmt := "CREATE TABLE wg_user (public_key text not null primary key, name text, ip text, updated text);"
+		createStmt := "CREATE TABLE wg_user (public_key text not null primary key, name text, ip text, added text);"
 		_, err = db.Exec(createStmt)
 		if err != nil {
 			return err

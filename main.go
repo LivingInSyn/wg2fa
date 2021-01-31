@@ -66,6 +66,8 @@ func main() {
 	turnOffAuthFlag := flag.Bool("dangerauth", false, "turn on to disable auth to the newuser API")
 	wgConfPathFlag := flag.String("wgc", "/etc/wireguard/wg0.conf", "the path to the wireguard config managed by wg2fa")
 	wgClientListPathFlag := flag.String("cl", "/etc/wireguard/clientList", "the path to write the clientList to")
+	ForceTimeFlag := flag.Int64("f", -1, "The number of minutes since auth to force a reauth regardless of activity")
+	IdleTimeFlag := flag.Int64("i", 10, "The number of minutes since last activity to force a reauth")
 	flag.Parse()
 	// setup logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
@@ -89,6 +91,13 @@ func main() {
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
+	// start the watchdog timer
+	rcc := removeClientConfig{
+		ForceTime: *ForceTimeFlag,
+		IdleTime:  *IdleTimeFlag,
+	}
+	go watchdog(&wgclient, &rcc)
+	// start the router
 	r := mux.NewRouter()
 	r.HandleFunc("/", HomeHandler).Methods("GET")
 	r.HandleFunc("/newuser", NewUser).Methods("POST")
