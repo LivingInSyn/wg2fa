@@ -25,6 +25,8 @@ go get github.com/mattn/go-sqlite3
 
 ### TODOs
 * finish initial smoke test of NewUser
-    * need to change the client list from that json flat file to sqlite to keep my sanity
-* create watchdog timer
+    * identify missing testing
+* refactor create user exec calls to be unit testable
+* write watchdog unit tests
+    * includes refactor to add channel to kill watchdog loop
 * Change to config file and make it easy
