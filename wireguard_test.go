@@ -1,4 +1,4 @@
-package wireguard
+package main
 
 import (
 	"os"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestParseConfig(t *testing.T) {
-	confpath := filepath.Join("..", "test", "wg0.conf")
+	confpath := filepath.Join(".", "test", "wg0.conf")
 	parsedConf, err := parseConfig(confpath)
 	if err != nil {
 		t.Errorf("error parsing wg0.conf")
@@ -39,7 +39,7 @@ func TestParseConfig(t *testing.T) {
 }
 
 func TestCheckClientConfigCreate(t *testing.T) {
-	confpath := filepath.Join("..", "test", "cc_create.db")
+	confpath := filepath.Join(".", "test", "cc_create.db")
 	err := checkClientDb(confpath, true)
 	if err != nil {
 		t.Errorf("error creating checking/creating client config")
@@ -49,7 +49,7 @@ func TestCheckClientConfigCreate(t *testing.T) {
 }
 
 func TestCheckClientConfigNoCreate(t *testing.T) {
-	confpath := filepath.Join("..", "test", "no_create.db")
+	confpath := filepath.Join(".", "test", "no_create.db")
 	err := checkClientDb(confpath, false)
 	if err == nil {
 		t.Errorf("we should get an error here")
@@ -58,7 +58,7 @@ func TestCheckClientConfigNoCreate(t *testing.T) {
 }
 
 func TestAddGetClients(t *testing.T) {
-	confpath := filepath.Join("..", "test", "addgetclient.db")
+	confpath := filepath.Join(".", "test", "addgetclient.db")
 	// call check/create to make sure we have a db
 	err := checkClientDb(confpath, true)
 	if err != nil {
@@ -86,7 +86,7 @@ func TestAddGetClients(t *testing.T) {
 }
 
 func TestOpenIP(t *testing.T) {
-	confpath := filepath.Join("..", "test", "addgetclient.db")
+	confpath := filepath.Join(".", "test", "addgetclient.db")
 	// call check/create to make sure we have a db
 	err := checkClientDb(confpath, true)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestOpenIP(t *testing.T) {
 		t.Errorf("error adding second user")
 	}
 	// get the next open IP
-	serverConfPath := filepath.Join("..", "test", "wg0.conf")
+	serverConfPath := filepath.Join(".", "test", "wg0.conf")
 	ip, err := getOpenIP(serverConfPath)
 	if err != nil {
 		t.Errorf("error getting open IP")
@@ -125,7 +125,7 @@ PublicKey = abc123
 PresharedKey = def456
 Endpoint = example.com:12345
 `
-	clientTemplatePath = filepath.Join("..", "text_templates", "client_config.txt")
+	clientTemplatePath = filepath.Join(".", "text_templates", "client_config.txt")
 	ccd := clientConfData{
 		ClientIP:       "10.0.0.5/24",
 		DNS:            "8.8.8.8, 8.8.4.4",
@@ -145,36 +145,6 @@ Endpoint = example.com:12345
 		t.Errorf("failed to match good block")
 	}
 
-}
-
-func TestBuildServerClientBlock(t *testing.T) {
-	goodBlock := `# abc123
-[Peer]
-PublicKey = abc123
-PresharedKey = def456
-AllowedIPs = 10.0.0.5/24
-# /abc123
-`
-
-	serverTemplatePath = filepath.Join("..", "text_templates", "server_client_entry.txt")
-	sccd := serverCConfData{
-		PublicKey: "abc123",
-		PSK:       "def456",
-		IP:        "10.0.0.5/24",
-	}
-	sccf, err := buildServerConfigBlock(&sccd)
-	if err != nil {
-		t.Errorf("failed to exec template: %s", err)
-	}
-	sccf = strings.Replace(sccf, "\r", "", -1)
-	if !strings.HasPrefix(sccf, goodBlock) {
-		// for i, c := range sccf {
-		// 	t.Logf("%d %c %c", i, c, goodBlock[i])
-		// }
-		t.Logf("good: %s", goodBlock)
-		t.Logf("bad: %s", sccf)
-		t.Errorf("failed to match good block")
-	}
 }
 
 func deleteFile(path string) {

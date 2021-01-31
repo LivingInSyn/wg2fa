@@ -1,4 +1,4 @@
-package wireguard
+package main
 
 import (
 	"bufio"
@@ -98,8 +98,8 @@ func parseConfig(confPath string) ([]configSection, error) {
 	return sections, nil
 }
 
-// GetClients returns a list of all users currently in the DB
-func GetClients() ([]ClientConfig, error) {
+// getClients returns a list of all users currently in the DB
+func getClients() ([]ClientConfig, error) {
 	clients := make([]ClientConfig, 0)
 	rows, err := db.Query("select name, public_key, ip, added from wg_user")
 	if err != nil {

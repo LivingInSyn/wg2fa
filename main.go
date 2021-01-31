@@ -7,23 +7,21 @@ import (
 	"net/http"
 	"time"
 
-	"./wireguard"
-
 	"github.com/gorilla/mux"
 	jwtverifier "github.com/okta/okta-jwt-verifier-golang"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
-var wgclient wireguard.WGClient
+var wgclient WGClient
 var clientID string
 var issuer string
 var disableAuth = false
 
-// NewUser accepts POSTs of new user objects and creates a new wireguard user.
+// NewUserHandler accepts POSTs of new user objects and creates a new wireguard user.
 // The returned wireguard config will require the caller to replace CLIENT_PRIVATE_KEY
 // with their private key
-func NewUser(w http.ResponseWriter, r *http.Request) {
+func NewUserHandler(w http.ResponseWriter, r *http.Request) {
 	btoken := r.Header.Get("Bearer")
 	if !disableAuth && isAuthenticated(btoken) {
 		w.WriteHeader(http.StatusForbidden)
@@ -34,13 +32,13 @@ func NewUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	var newUser wireguard.NewUser
+	var newUser NewUser
 	err = json.Unmarshal(reqbody, &newUser)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	createdUser, err := wgclient.NewUser(newUser)
+	createdUser, err := wgclient.newUser(newUser)
 	if err != nil {
 		log.Error().Str("error", err.Error()).Msg("Error creating new user")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -96,14 +94,14 @@ func main() {
 	// initialize the wireguard client
 	// TODO: make these come from a conf file and
 	// from flags
-	wgclient = wireguard.WGClient{
+	wgclient = WGClient{
 		WGConfigPath:   *wgConfPathFlag,
 		ClientListPath: *wgClientListPathFlag,
 		DNSServers:     []string{"8.8.8.8, 8.8.4.4"},
 		ServerHostname: "localhost:51280",
 		InterfaceName:  "wg0",
 	}
-	err := wgclient.Init()
+	err := wgclient.init()
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
@@ -116,7 +114,7 @@ func main() {
 	// start the router
 	r := mux.NewRouter()
 	r.HandleFunc("/", HomeHandler).Methods("GET")
-	r.HandleFunc("/newuser", NewUser).Methods("POST")
+	r.HandleFunc("/newuser", NewUserHandler).Methods("POST")
 	// start
 	srv := &http.Server{
 		Addr: "0.0.0.0:8080",

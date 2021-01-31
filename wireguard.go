@@ -1,4 +1,4 @@
-package wireguard
+package main
 
 import (
 	"errors"
@@ -44,7 +44,7 @@ type NewUser struct {
 }
 
 // Init initializes a WGClient
-func (c WGClient) Init() error {
+func (c WGClient) init() error {
 	log.Debug().Msg("Initializing wireguard client")
 	err := checkClientDb(c.ClientListPath, true)
 	if err != nil {
@@ -83,7 +83,7 @@ func (c WGClient) Init() error {
 }
 
 // NewUser creates a new user
-func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
+func (c WGClient) newUser(newuser NewUser) (NewUser, error) {
 	// check the username for regex
 	match, err := regexp.MatchString(usernameRegex, newuser.ClientName)
 	if err != nil {
@@ -137,7 +137,7 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 }
 
 // RemoveUser deletes a user
-func (c WGClient) RemoveUser(pubkey string) error {
+func (c WGClient) removeUser(pubkey string) error {
 	//remove from the wgconfig
 	commandArgs := []string{"set", c.InterfaceName, "peer", pubkey, "remove"}
 	err := exec.Command("wg", commandArgs...).Wait()
@@ -153,7 +153,7 @@ func (c WGClient) RemoveUser(pubkey string) error {
 }
 
 // GetLastHandshakes returns a map of public keys to last handshake times
-func (c WGClient) GetLastHandshakes() (map[string]time.Time, error) {
+func (c WGClient) getLastHandshakes() (map[string]time.Time, error) {
 	handshakes := make(map[string]time.Time)
 	args := []string{"show", c.InterfaceName, "latest-handshakes"}
 	hsbytes, err := exec.Command("wg", args...).Output()
@@ -268,7 +268,7 @@ func getOpenIP(confPath string) (string, error) {
 		return "", errors.New("No IP Range string found")
 	}
 	ip, ipNet, err := net.ParseCIDR(ipRangeString)
-	currentClients, err := GetClients()
+	currentClients, err := getClients()
 	currentIPs := make(map[string]bool)
 	for _, client := range currentClients {
 		currentIPs[client.IP] = true
