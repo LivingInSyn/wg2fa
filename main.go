@@ -65,7 +65,6 @@ func main() {
 	debugFlag := flag.Bool("debug", false, "turn debug logging on")
 	turnOffAuthFlag := flag.Bool("dangerauth", false, "turn on to disable auth to the newuser API")
 	wgConfPathFlag := flag.String("wgc", "/etc/wireguard/wg0.conf", "the path to the wireguard config managed by wg2fa")
-	wgClientConfPathFlag := flag.String("cwg", "/etc/wireguard/clientConfigs", "the path to write client configs to on the disk")
 	wgClientListPathFlag := flag.String("cl", "/etc/wireguard/clientList", "the path to write the clientList to")
 	flag.Parse()
 	// setup logging
@@ -81,11 +80,10 @@ func main() {
 	// TODO: make these come from a conf file and
 	// from flags
 	wgclient = wireguard.WGClient{
-		WGConfigPath:     *wgConfPathFlag,
-		ClientConfigPath: *wgClientConfPathFlag,
-		ClientListPath:   *wgClientListPathFlag,
-		DNSServers:       []string{"8.8.8.8, 8.8.4.4"},
-		ServerHostname:   "localhost:51280",
+		WGConfigPath:   *wgConfPathFlag,
+		ClientListPath: *wgClientListPathFlag,
+		DNSServers:     []string{"8.8.8.8, 8.8.4.4"},
+		ServerHostname: "localhost:51280",
 	}
 	err := wgclient.Init()
 	if err != nil {

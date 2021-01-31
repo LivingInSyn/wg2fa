@@ -23,8 +23,6 @@ var serverPubKey string
 type WGClient struct {
 	// WGConfigPath is the path to the wireguard config to manage
 	WGConfigPath string
-	// ClientConfigs is the location to write generated client configs to. If nil or blank this will not be written to disk
-	ClientConfigPath string
 	// ClientListPath is the location of the file that stores the list of configured clients, their IP and public key. No private data
 	ClientListPath string
 	// DNS is a slice of strings for what DNS servers to configure
@@ -115,27 +113,15 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 		PSK:       psk,
 		IP:        ip,
 	}
-	sccf, err := buildServerConfigBlock(&sccd)
-	// todo: write sccf to the server config file
-	err = addUserToSConf(c.WGConfigPath, sccf, &sccd)
+	// add user to config file
+	err = addUserToSConf(&sccd)
 	if err != nil {
-		return NewUser{}, errors.New("Couldn't write to wg config file")
+		return NewUser{}, errors.New("Couldn't write to client to wg config")
 	}
-	// finally, quick restart the wg server async
-	// TODO: (is this REQUIRED??)
-
 	// return the completed new user
 	err = addClientToDb(newuser.ClientName, newuser.PublicKey, ip)
 	if err != nil {
 		return NewUser{}, err
-	}
-	// optionally write to the ClientConfigPath
-	if c.ClientConfigPath != "" {
-		keyfilename := fmt.Sprintf("%s/%s.conf", c.ClientConfigPath, newuser.ClientName)
-		err = ioutil.WriteFile(keyfilename, []byte(ccf), 0644)
-		if err != nil {
-			log.Error().Str("error", err.Error()).Msg("error writing client conf")
-		}
 	}
 	newuser.WGConf = ccf
 	return newuser, nil
@@ -144,8 +130,16 @@ func (c WGClient) NewUser(newuser NewUser) (NewUser, error) {
 // RemoveUser deletes a user
 func (c WGClient) RemoveUser(pubkey string) error {
 	//remove from the wgconfig
+	commandArgs := []string{"set", "wg0", "peer", pubkey, "remove"}
+	err := exec.Command("wg", commandArgs...).Wait()
+	if err != nil {
+		log.Error().AnErr("error adding peer to wg config", err)
+		return err
+	}
 	//remove from the clientlist
-	removeClientFromDb(pubkey)
+	if err = removeClientFromDb(pubkey); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -192,39 +186,29 @@ func createPSK() (string, error) {
 	return psk, nil
 }
 
-func addUserToSConf(path, scb string, scd *serverCConfData) error {
-	// sudo wg set wg0 peer <Client Public Key> endpoint <Client IP address>:51820 allowed-ips 203.0.113.12/24,fd86:ea04:1115::5/64
+func addUserToSConf(scd *serverCConfData) error {
+	// we need to write PSK to a temp file
+	tmpFile, err := ioutil.TempFile(os.TempDir(), "wg2fa-")
+	if err != nil {
+		log.Error().AnErr("Cannot create temporary file", err)
+		return err
+	}
+	// Remember to clean up the file afterwards
+	defer os.Remove(tmpFile.Name())
+	if _, err = tmpFile.Write([]byte(scd.PSK)); err != nil {
+		log.Error().AnErr("Failed to write to temporary file", err)
+		return err
+	}
+	// close it
+	if err := tmpFile.Close(); err != nil {
+		log.Error().AnErr("error closing temp file", err)
+		return err
+	}
 	// wg set ${INTERFACE} peer ${PUBLIC_KEY} preshared-key <(echo ${PRESHARED_KEY}) allowed-ips ${PEER_ADDRESS}
-	// command := []string {"sudo", "wg", "set", "wg0", "peer", scd.PublicKey, "allowed-ips"}
-	// check for dup public keys and error on presence
-	confSections, err := parseConfig(path)
+	commandArgs := []string{"set", "wg0", "peer", scd.PublicKey, "preshared-key", tmpFile.Name(), "allowed-ips", scd.IP}
+	err = exec.Command("wg", commandArgs...).Wait()
 	if err != nil {
-		return err
-	}
-	for _, sec := range confSections {
-		// check if it's a peer:
-		if strings.ToLower(sec.SectionName) == "peer" {
-			//check the pubkey
-			pubkey, ok := sec.ConfigValues["PublicKey"]
-			if ok {
-				if pubkey == *&scd.PublicKey {
-					return errors.New("peer with that public key already exists")
-				}
-			} else {
-				log.Warn().Msg("peer exists with no public key")
-			}
-		}
-	}
-	// add user to it by reading the file
-	f, err := os.OpenFile(path,
-		os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Error().AnErr("error opening server config file for writing", err)
-		return err
-	}
-	defer f.Close()
-	if _, err := f.WriteString(scb); err != nil {
-		log.Error().AnErr("error writing to server config file", err)
+		log.Error().AnErr("error adding peer to wg config", err)
 		return err
 	}
 	return nil
