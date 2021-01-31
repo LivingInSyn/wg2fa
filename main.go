@@ -16,8 +16,8 @@ import (
 )
 
 var wgclient wireguard.WGClient
-var clientID = "0oawepftsdT43o2CM0h7"
-var issuer = "https://dev-318981-admin.oktapreview.com/oauth2/default"
+var clientID string
+var issuer string
 var disableAuth = false
 
 // NewUser accepts POSTs of new user objects and creates a new wireguard user.
@@ -68,6 +68,8 @@ func main() {
 	wgClientListPathFlag := flag.String("cl", "/etc/wireguard/clientList", "the path to write the clientList to")
 	ForceTimeFlag := flag.Int64("f", -1, "The number of minutes since auth to force a reauth regardless of activity")
 	IdleTimeFlag := flag.Int64("i", 10, "The number of minutes since last activity to force a reauth")
+	ClientIDFlag := flag.String("cid", "", "The client ID for OAuth")
+	IssuerFlag := flag.String("iss", "", "The oauth issuer URL")
 	//TODO:
 	// ForceRecreateFlag := flag.Bool("force-recreate", false, "force the recreation of the user database and clearing all authenticated users")
 	flag.Parse()
@@ -79,6 +81,17 @@ func main() {
 	// if we want auth to be disables for testing:
 	if *turnOffAuthFlag {
 		disableAuth = true
+	}
+	// set the client ID and issuer
+	if *&clientID != "" {
+		clientID = *ClientIDFlag
+	} else {
+		log.Fatal().Msg("Empty client ID")
+	}
+	if *IssuerFlag != "" {
+		issuer = *IssuerFlag
+	} else {
+		log.Fatal().Msg("Empty Issuer")
 	}
 	// initialize the wireguard client
 	// TODO: make these come from a conf file and
