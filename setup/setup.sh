@@ -12,4 +12,4 @@ sudo chmod 600 /etc/wireguard/{privatekey,wg0.conf}
 #sudo mkdir /etc/wireguard/clientList
 #startup with systemd
 sudo systemctl enable wg-quick@wg0
-sudo systemstl start 
+sudo systemctl start wg-quick@wg0
