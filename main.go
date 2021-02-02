@@ -74,10 +74,12 @@ func main() {
 	// setup logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	if *debugFlag {
+		log.Debug().Msg("setting log level to debug")
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 	// if we want auth to be disables for testing:
 	if *turnOffAuthFlag {
+		log.Warn().Msg("===WARNING=== setting danger auth to true, not validating ANY tokens")
 		disableAuth = true
 	}
 	// set the client ID and issuer
@@ -105,6 +107,11 @@ func main() {
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
+	log.Debug().Str("wg config set to:", *wgConfPathFlag).
+		Str("client db set to", *wgClientListPathFlag).
+		Str("server hostname set to", wgclient.ServerHostname).
+		Str("interface name set to", wgclient.InterfaceName).
+		Msg("wgclient init complete")
 	// start the watchdog timer
 	rcc := removeClientConfig{
 		ForceTime: *ForceTimeFlag,
