@@ -10,9 +10,13 @@
             "request": "launch",
             "mode": "debug",
             "program": "${workspaceFolder}",
-            "args": ["--wgc", "C:\\Users\\jerem\\Documents\\wg2fa\\test\\wg0.conf",
-                     "--cl", "C:\\Users\\jerem\\Documents\\wg2fa\\test\\clientList",
-                     "--dangerauth",]
+            "args": ["--wgc", "/etc/wireguard/wg0.conf",
+                     "--cl", "/etc/wireguard/clientDB",
+                     "--dangerauth",
+                     "--debug",
+                     "--cid", "a",
+                     "--iss", "b",
+                ]
         }
     ]
 }

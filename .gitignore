@@ -16,3 +16,7 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 _old/*
+
+# ignore the compiled binary
+wg2fa
+wg2fa.exe

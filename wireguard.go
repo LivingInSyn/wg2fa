@@ -241,11 +241,12 @@ func addUserToSConf(scd *serverCConfData) error {
 		log.Error().AnErr("error closing temp file", err)
 		return err
 	}
-	// wg set ${INTERFACE} peer ${PUBLIC_KEY} preshared-key <(echo ${PRESHARED_KEY}) allowed-ips ${PEER_ADDRESS}
 	commandArgs := []string{"set", scd.Interface, "peer", scd.PublicKey, "preshared-key", tmpFile.Name(), "allowed-ips", scd.IP}
-	err = exec.Command("wg", commandArgs...).Wait()
+	// for some reason .Wait caused a crash here, so changing to output and logging it works :shrug:
+	obytes, err := exec.Command("/usr/bin/wg", commandArgs...).Output()
+	log.Debug().Str("command out", string(obytes))
 	if err != nil {
-		log.Error().AnErr("error adding peer to wg config", err)
+		log.Error().AnErr("error adding peer to wg config", err).Msg("Error calling wg set")
 		return err
 	}
 	return nil

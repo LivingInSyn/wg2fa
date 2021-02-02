@@ -81,7 +81,7 @@ func main() {
 		disableAuth = true
 	}
 	// set the client ID and issuer
-	if *&clientID != "" {
+	if *ClientIDFlag != "" {
 		clientID = *ClientIDFlag
 	} else {
 		log.Fatal().Msg("Empty client ID")
@@ -124,6 +124,7 @@ func main() {
 		IdleTimeout:  time.Second * 60,
 		Handler:      r, // Pass our instance of gorilla/mux in.
 	}
+	log.Debug().Msg("Starting http server")
 	log.Fatal().Msg(srv.ListenAndServe().Error())
 }
 
