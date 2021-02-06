@@ -140,16 +140,16 @@ func (c WGClient) newUser(newuser NewUser) (NewUser, error) {
 func (c WGClient) removeUser(pubkey string) error {
 	//remove from the wgconfig
 	commandArgs := []string{"set", c.InterfaceName, "peer", pubkey, "remove"}
-	err := exec.Command("wg", commandArgs...).Wait()
+	obytes, err := exec.Command("wg", commandArgs...).Output()
+	log.Debug().Str("wg remove output", string(obytes)).Msg("output from wg peer remove")
 	if err != nil {
-		log.Error().AnErr("error adding peer to wg config", err)
-		return err
+		log.Error().AnErr("error removing peer from wg config", err)
 	}
 	//remove from the clientlist
 	if err = removeClientFromDb(pubkey); err != nil {
-		return err
+		log.Error().AnErr("error removing client from DB", err)
 	}
-	return nil
+	return err
 }
 
 // GetLastHandshakes returns a map of public keys to last handshake times
