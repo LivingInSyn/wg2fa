@@ -22,19 +22,25 @@ var disableAuth = false
 // The returned wireguard config will require the caller to replace CLIENT_PRIVATE_KEY
 // with their private key
 func NewUserHandler(w http.ResponseWriter, r *http.Request) {
+	log.Debug().Msg("Starting New User http handler")
 	btoken := r.Header.Get("Bearer")
 	if !disableAuth && isAuthenticated(btoken) {
+		log.Warn().Str("ip", r.RemoteAddr).Msg("request permission denied")
 		w.WriteHeader(http.StatusForbidden)
 		return
+	} else if disableAuth {
+		log.Warn().Msg("Auth disabled! Allowing request")
 	}
 	reqbody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		log.Error().AnErr("error reading from body", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	var newUser NewUser
 	err = json.Unmarshal(reqbody, &newUser)
 	if err != nil {
+		log.Error().AnErr("error unmarshaling user", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -46,6 +52,7 @@ func NewUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonNewUser, err := json.Marshal(createdUser)
 	if err != nil {
+		log.Error().AnErr("error marshaling new user to JSON", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -55,6 +62,7 @@ func NewUserHandler(w http.ResponseWriter, r *http.Request) {
 
 // HomeHandler just returns a 200 OK
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
+	log.Debug().Msg("starting home handler")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }
@@ -148,5 +156,6 @@ func isAuthenticated(jwt string) bool {
 	verifier := jwtVerifierSetup.New()
 
 	_, err := verifier.VerifyAccessToken(jwt)
+	log.Debug().AnErr("JWT verifier error", err)
 	return err != nil
 }
