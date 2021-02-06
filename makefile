@@ -4,7 +4,6 @@ wireguard:
 	# setup keys and conf files
 	cp ./setup/wg0.conf /etc/wireguard/wg0.conf
 	wg genkey | sudo tee /etc/wireguard/privatekey | wg pubkey | sudo tee /etc/wireguard/publickey
-	cp ./wg0.conf /etc/wireguard/
 	sed -i "s/SERVER_PRIVATE_KEY/$(cat /etc/wireguard/privatekey)/g" /etc/wireguard/wg0.conf
 	chmod 600 /etc/wireguard/privatekey
 	chmod 600 /etc/wireguard/wg0.config
