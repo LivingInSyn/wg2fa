@@ -6,7 +6,7 @@ wireguard:
 	cp ./wg0.conf /etc/wireguard/
 	sed -i "s/SERVER_PRIVATE_KEY/$(cat /etc/wireguard/privatekey)/g" /etc/wireguard/wg0.conf
 	chmod 600 /etc/wireguard/privatekey
-    chmod 600 /etc/wireguard/wg0.config
+	chmod 600 /etc/wireguard/wg0.config
 
 wgup:
 	# start wireguard
