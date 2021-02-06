@@ -1,6 +1,6 @@
 wireguard:
 	# install wireguard
-	apt install wireguard
+	apt -y install wireguard
 	# setup keys and conf files
 	wg genkey | sudo tee /etc/wireguard/privatekey | wg pubkey | sudo tee /etc/wireguard/publickey
 	cp ./wg0.conf /etc/wireguard/
