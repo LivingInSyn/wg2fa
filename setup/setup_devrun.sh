@@ -4,4 +4,5 @@ git clone https://github.com/LivingInSyn/wg2fa.git
 cd wg2fa
 make go
 make wireguard
-# make dangerrun
+make wgup
+make dangerrun
