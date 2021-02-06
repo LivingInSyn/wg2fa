@@ -4,11 +4,11 @@
 ### normal install
 This script does not auto start wg2fa or wireguard
 ```
-wget https://raw.githubusercontent.com/LivingInSyn/wg2fa/main/setup/setup.sh | sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/LivingInSyn/wg2fa/main/setup/setup.sh | sh
 ```
 ### dev autorun
 ```
-wget https://raw.githubusercontent.com/LivingInSyn/wg2fa/main/setup/setup_devrun.sh | sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/LivingInSyn/wg2fa/main/setup/setup_devrun.sh | sh
 ```
 
 ## manual server setup instructions
