@@ -1,5 +1,19 @@
-# server setup instructions
-## Install Wireguard
+# Install Instructions
+
+## Automatic install
+### normal install
+This script does not auto start wg2fa or wireguard
+```
+wget https://raw.githubusercontent.com/LivingInSyn/wg2fa/main/setup/setup.sh | sh
+```
+### dev autorun
+```
+wget https://raw.githubusercontent.com/LivingInSyn/wg2fa/main/setup/setup_devrun.sh | sh
+```
+
+## manual server setup instructions
+
+### Install Wireguard
 First install wireguard and setup the server keys
 ```shell
 # install wireguard
@@ -8,7 +22,7 @@ sudo apt install wireguard
 wg genkey | sudo tee /etc/wireguard/privatekey | wg pubkey | sudo tee /etc/wireguard/publickey
 ```
 
-## Create wireguard conf
+### Create wireguard conf
 Next Create the config file `/etc/wireguard/wg0.conf` replacing SERVER_PRIVATE_KEY with the contents of `/etc/wireguard/privatekey`
 ```
 [Interface]
@@ -26,7 +40,7 @@ sudo sed -i "s/SERVER_PRIVATE_KEY/$(cat /etc/wireguard/privatekey)/g" test.conf
 
 *note 2*: You MAY have to update the pre and post routing IPTables config.  Replace eth0 with the interface you want wireguard to egress from
 
-## Check your permissions
+### Check your permissions
 Next check your permissions on the files we created.
 
 ```shell
