@@ -42,4 +42,5 @@ sudo chmod 600 /etc/wireguard/wg0.conf
 
 #sudo make wireguard
 sudo make wgup
+make build
 sudo make dangerrun

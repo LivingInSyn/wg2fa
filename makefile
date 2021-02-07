@@ -18,5 +18,5 @@ build:
 run:
 	go run main.go
 
-dangerrun: build
+dangerrun:
 	./wg2fa --wgc /etc/wireguard/wg0.conf --cl /etc/wireguard/clientDB --dangerauth --debug --cid a --iss b
