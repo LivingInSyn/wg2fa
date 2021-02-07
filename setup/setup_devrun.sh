@@ -6,7 +6,7 @@ git clone https://github.com/LivingInSyn/wg2fa.git
 cd wg2fa
 
 # install go if it doesn't already exist:
-if `go --version` ; then
+if `go version` ; then
 	echo "go installed, continuing"
 else
     # test if it's just not on the path
