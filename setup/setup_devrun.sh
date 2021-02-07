@@ -20,9 +20,9 @@ else
 fi
 
 # clean old wireguard configs
-rm -rf /etc/wireguard/privatekey
-rm -rf /etc/wireguard/publickey
-rm -rf /etc/wireguard/wg0.conf
+sudo rm -rf /etc/wireguard/privatekey
+sudo rm -rf /etc/wireguard/publickey
+sudo rm -rf /etc/wireguard/wg0.conf
 # install wireguard if it doesn't exist
 if `wg --version` ; then
     echo "wireguard already installed"
