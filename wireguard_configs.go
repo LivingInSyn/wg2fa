@@ -147,7 +147,11 @@ func addClientToDb(name, pubkey, ip string) error {
 	insertStmt := "INSERT INTO wg_user (public_key, name, ip, added) VALUES ($1, $2, $3, $4);"
 	_, err := db.Exec(insertStmt, pubkey, name, ip, cTime)
 	if err != nil {
-		log.Error().AnErr("error inserting into client table", err)
+		if strings.HasPrefix(err.Error(), "UNIQUE constraint failed") {
+			log.Warn().Str("pubkey", pubkey).Msg("user already exists in the database")
+			return errors.New("User already exists")
+		}
+		log.Error().AnErr("error", err).Msg("error inserting into client table")
 		return err
 	}
 	return nil
