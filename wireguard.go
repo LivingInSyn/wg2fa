@@ -162,12 +162,16 @@ func (c WGClient) getLastHandshakes() (map[string]time.Time, error) {
 		return handshakes, err
 	}
 	hsOut := string(hsbytes)
+	log.Debug().Str("latest-handshakes output", hsOut).Msg("output from latest handshakes command")
 	lines := strings.Split(hsOut, "\n")
 	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
 		splitline := strings.Split(line, " ")
 		pubkey := splitline[0]
 		if len(pubkey) < 5 {
-			log.Warn().Msg("invalid public key")
+			log.Warn().Str("public key", pubkey).Msg("invalid public key")
 		}
 		timeint, err := strconv.ParseInt(splitline[len(splitline)-1], 10, 64)
 		if err != nil {

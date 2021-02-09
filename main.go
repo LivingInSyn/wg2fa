@@ -56,8 +56,8 @@ func NewUserHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	log.Info().Str("new user", createdUser.ClientName).Str("public key", createdUser.PublicKey).Msg("created new user")
 	w.Write(jsonNewUser)
-	w.WriteHeader(http.StatusOK)
 }
 
 // HomeHandler just returns a 200 OK

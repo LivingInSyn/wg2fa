@@ -34,6 +34,7 @@ func watchdog(wgc *WGClient, rc *removeClientConfig) {
 			if rc.ForceTime > 0 {
 				minAgo := time.Now().Add(-1 * time.Duration(rc.ForceTime))
 				if client.Added.Before(minAgo) {
+					log.Info().Str("pubkey", client.PublicKey).Msg("Removing client due to Force Time")
 					wgc.removeUser(client.PublicKey)
 					continue
 				}
@@ -42,6 +43,7 @@ func watchdog(wgc *WGClient, rc *removeClientConfig) {
 				lastHandshake := lastHandshakes[client.PublicKey]
 				minAgo := time.Now().Add(-1 * time.Duration(rc.IdleTime))
 				if lastHandshake.Before(minAgo) {
+					log.Info().Str("pubkey", client.PublicKey).Msg("Removing client due to Idle Time")
 					wgc.removeUser(client.PublicKey)
 				}
 			}
