@@ -171,7 +171,7 @@ func (c WGClient) getLastHandshakes() (map[string]time.Time, error) {
 		splitline := strings.Split(line, " ")
 		pubkey := splitline[0]
 		if len(pubkey) < 5 {
-			log.Warn().Msg("invalid public key")
+			log.Warn().Str("public key", pubkey).Msg("invalid public key")
 		}
 		timeint, err := strconv.ParseInt(splitline[len(splitline)-1], 10, 64)
 		if err != nil {
